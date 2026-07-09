@@ -41,6 +41,9 @@ class CachedExtractor:
     def extract(self, record: PredictionRecord) -> list[str]:
         return list(self._by_id.get(record.id, []))
 
+    def covers(self, record_id: str) -> bool:
+        return record_id in self._by_id
+
 
 class OpenAICompatibleExtractor:
     """Call a local OpenAI-compatible endpoint (LM Studio / Ollama / vLLM)."""

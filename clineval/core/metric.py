@@ -36,8 +36,13 @@ def register_metric(task: str) -> Callable[[type[Metric]], type[Metric]]:
 
     def decorator(cls: type[Metric]) -> type[Metric]:
         bucket = _REGISTRY.setdefault(task, [])
-        if cls not in bucket:
-            bucket.append(cls)
+        if cls in bucket:
+            return cls
+        if any(existing.name == cls.name for existing in bucket):
+            raise ValueError(
+                f"metric name {cls.name!r} is already registered for task {task!r}"
+            )
+        bucket.append(cls)
         return cls
 
     return decorator

@@ -70,6 +70,16 @@ def run(
         rec.system_output = extractor.extract(rec)
         adapters.normalize_record(rec)
 
+    hits: int | None = None
+    if not live:
+        hits = sum(1 for rec in records if extractor.covers(rec.id))
+        if hits == 0:
+            typer.echo(
+                f"WARNING: 0/{len(records)} records matched cache '{cache}' — the "
+                "report will be all-zero. Check --dataset/--cache alignment or use --live.",
+                err=True,
+            )
+
     ontology = Ontology()
     records, alignment = adapters.align_records(records, ontology)
     context = EvalContext(ontology=ontology, config={})
@@ -88,4 +98,7 @@ def run(
     out_path = Path(report)
     out_path.parent.mkdir(parents=True, exist_ok=True)
     out_path.write_text(output, encoding="utf-8")
-    typer.echo(f"Wrote {report}  (documents: {result.n_documents}, model: {model_label})")
+    summary = f"Wrote {report}  (documents: {result.n_documents}, model: {model_label})"
+    if hits is not None:
+        summary += f"  cache hits: {hits}/{len(records)}"
+    typer.echo(summary)

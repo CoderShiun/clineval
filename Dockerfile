@@ -13,11 +13,11 @@ RUN pip install --no-cache-dir uv
 WORKDIR /app
 
 # Layer-cache dependencies: copy only manifests first, sync deps without the project.
-COPY pyproject.toml ./
-RUN uv sync --extra dev --no-install-project
+COPY pyproject.toml uv.lock ./
+RUN uv sync --extra dev --no-install-project --frozen
 
 # Copy the rest and install the project itself (editable).
 COPY . .
-RUN uv sync --extra dev
+RUN uv sync --extra dev --frozen
 
 CMD ["uv", "run", "pytest", "-q"]

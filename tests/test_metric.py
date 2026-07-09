@@ -1,3 +1,5 @@
+import pytest
+
 from clineval.core.metric import (
     EvalContext,
     Metric,
@@ -26,3 +28,21 @@ def test_register_and_get_metrics():
     assert [m.name for m in metrics] == ["dummy"]
     result = metrics[0].compute([1, 2, 3], EvalContext())
     assert result.aggregate["n"] == 3.0
+
+
+def test_register_metric_rejects_duplicate_name_different_class():
+    @register_metric("dup_name_task")
+    class First(Metric):
+        name = "dup"
+
+        def compute(self, records, context):
+            return MetricResult(name=self.name, aggregate={})
+
+    with pytest.raises(ValueError):
+
+        @register_metric("dup_name_task")
+        class Second(Metric):
+            name = "dup"
+
+            def compute(self, records, context):
+                return MetricResult(name=self.name, aggregate={})

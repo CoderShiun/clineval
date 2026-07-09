@@ -31,6 +31,9 @@ packages = ["clineval"]
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 addopts = "-q"
+filterwarnings = [
+    "ignore:Support for class-based `config` is deprecated.*:DeprecationWarning:pyhpo.*",
+]
 
 [tool.ruff]
 line-length = 100

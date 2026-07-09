@@ -26,6 +26,7 @@ def render_report(result: EvaluationResult) -> str:
         autoescape=False,
         trim_blocks=True,
         lstrip_blocks=True,
+        keep_trailing_newline=True,
     )
     template = env.get_template("report.md.j2")
     tier1 = _metric(result, "tier1_exact")

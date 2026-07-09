@@ -83,7 +83,7 @@ def download(dest: str = DEFAULT_DEST) -> None:
     dest_dir.mkdir(parents=True, exist_ok=True)
     print(f"Downloading GSC+ from {GSC_PLUS_URL} ...")
     # URL must be verified before use — see module docstring.
-    with urllib.request.urlopen(GSC_PLUS_URL) as resp:  # noqa: S310
+    with urllib.request.urlopen(GSC_PLUS_URL, timeout=60) as resp:  # noqa: S310
         data = resp.read()
     with zipfile.ZipFile(io.BytesIO(data)) as zf:
         zf.extractall(dest_dir / "raw")

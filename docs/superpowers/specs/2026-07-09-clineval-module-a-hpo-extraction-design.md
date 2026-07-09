@@ -109,11 +109,11 @@ Isolated so metrics never call PyHPO directly — this keeps metrics testable an
 
 ### 3.1 HPO ID format normalization (must exist or nothing matches)
 
-GSC+ writes HPO IDs with underscores (`HP_0000110`); PyHPO uses colons (`HP:0000110`). A shared helper normalizes IDs — `HP_0000110 → HP:0000110`, trimming whitespace and upper-casing the `HP` prefix — and is applied to **both gold and predictions**:
-- gold IDs in `GscPlusLoader` (and the JSONL loader),
-- predicted IDs in `tasks/hpo_extraction/adapters.py`,
+GSC+ writes HPO IDs with underscores (`HP_0000110`); PyHPO uses colons (`HP:0000110`). A shared helper (`tasks/hpo_extraction/adapters.normalize_hpo_ids`) normalizes IDs — `HP_0000110 → HP:0000110`, trimming whitespace and upper-casing the `HP` prefix. Normalization is layered to respect task-agnostic boundaries:
+- **`GscPlusLoader`** normalizes its gold IDs defensively at load time (belt-and-suspenders, since GSC+ is the one source known to use underscores), while the generic **`JSONLDatasetLoader`** in `core/dataset.py` stays task-agnostic and applies no HPO-specific normalization.
+- The **hpo_extraction pipeline** (CLI and notebook, via `adapters.normalize_record`) normalizes **both gold and predictions** for every record immediately after loading and after extraction, regardless of loader.
 
-before any ontology lookup or matching. This is a hard prerequisite for Tier 1 exact matching to work at all.
+The pipeline-level pass is the hard prerequisite for Tier 1 exact matching to work at all; the loader-level pass on `GscPlusLoader` is defense-in-depth, not the sole guarantee.
 
 ### 3.2 Version alignment (applied at load, to both gold and predictions)
 
@@ -179,8 +179,8 @@ Deliberately simple — it is the **evaluated** object, not the product. An `Ext
 
 ## 6. Datasets (`tasks/hpo_extraction/datasets.py`, `datasets/`)
 
-- **`DatasetLoader` ABC** (in `core/dataset.py`) + a **JSONL loader** for user-supplied `{input_text, gold_reference}` records (bring-your-own gold + predictions).
-- **`GscPlusLoader`** — parses GSC+ into `PredictionRecord`s, applying HPO-ID normalization (§3.1) to gold.
+- **`DatasetLoader` ABC** (in `core/dataset.py`) + a **JSONL loader** for user-supplied `{input_text, gold_reference}` records (bring-your-own gold + predictions); task-agnostic, no HPO-specific normalization.
+- **`GscPlusLoader`** — parses GSC+ into `PredictionRecord`s, defensively normalizing gold IDs (§3.1) at load time. The pipeline (CLI/notebook) still normalizes gold + predictions for every record regardless of loader.
 - **`datasets/download_gsc.py`** — fetches real GSC+ at runtime into a **git-ignored** folder. **`datasets/README.md`** records the source and **license** (license confirmed during implementation *before* any bundling; prefer the downloader over committing raw data).
 - **`examples/data/synthetic_mini.jsonl`** — ~10 clearly-synthetic records (committed), powering pytest and the always-offline smoke demo.
 - **`examples/data/cached_predictions.jsonl`** — cached real predictions (committed), with model provenance (§5).

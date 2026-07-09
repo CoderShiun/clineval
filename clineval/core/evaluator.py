@@ -18,6 +18,11 @@ def evaluate(
 ) -> EvaluationResult:
     """Evaluate ``records`` with every metric registered under ``task``."""
     metrics = get_metrics(task)
+    if not metrics:
+        raise ValueError(
+            f"no metrics registered for task {task!r} — import the task package "
+            "(e.g. `import clineval.tasks.hpo_extraction`) so its metrics register"
+        )
     results = [m.compute(records, context) for m in metrics]
     return EvaluationResult(
         task=task,
