@@ -1,0 +1,37 @@
+[project]
+name = "clineval"
+version = "0.1.0"
+description = "Open-source, self-hostable evaluation toolkit for clinical LLM outputs. Module A: HPO extraction evaluation."
+readme = "README.md"
+requires-python = ">=3.14"
+license = { text = "MIT" }
+authors = [{ name = "ClinEval contributors" }]
+keywords = ["clinical", "evaluation", "HPO", "phenotype", "LLM", "regulatory"]
+# Floors only (no upper pins): uv resolves the newest compatible version of each.
+dependencies = [
+    "pyhpo>=3.1.4",
+    "openai>=1.40",
+    "typer>=0.12",
+    "jinja2>=3.1",
+]
+
+[project.optional-dependencies]
+dev = ["pytest>=8.0", "ruff>=0.6"]
+
+[project.scripts]
+clineval = "clineval.cli:app"
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["clineval"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-q"
+
+[tool.ruff]
+line-length = 100
+target-version = "py314"

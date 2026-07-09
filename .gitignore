@@ -1,1 +1,14 @@
+# Private notes (existing)
 docs/Self
+
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+*.egg-info/
+.pytest_cache/
+.ruff_cache/
+
+# Generated reports and downloaded datasets
+reports/
+datasets/gsc_plus/

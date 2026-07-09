@@ -1,0 +1,14 @@
+services:
+  clineval:
+    build: .
+    working_dir: /app
+    environment:
+      - UV_PROJECT_ENVIRONMENT=/opt/venv
+    volumes:
+      - .:/app                      # host repo is the source of truth
+      - pyhpo-cache:/root/.cache    # persist any PyHPO/uv runtime cache
+    extra_hosts:
+      - "host.docker.internal:host-gateway"   # reach host LM Studio for --live
+
+volumes:
+  pyhpo-cache:
