@@ -5,6 +5,8 @@
 #   HP:0001250 Seizure             (unrelated to the VSD subtree)
 #   HP:0000118 Phenotypic abnormality (very broad -> low IC)
 
+import pytest
+
 
 def test_version_is_nonempty(ontology):
     assert isinstance(ontology.version, str) and ontology.version
@@ -52,3 +54,35 @@ def test_resolve_flags_obsolete_retained_term(ontology):
     res = ontology.resolve("HP:0000057")
     assert res.status == "obsolete"
     assert res.resolved is None
+
+
+def test_resolve_alt_id_real(ontology):
+    # HP:0004715 is a secondary (alt) id whose primary is HP:0000003.
+    res = ontology.resolve("HP:0004715")
+    assert res.status == "alt_id"
+    assert res.resolved == "HP:0000003"
+
+
+@pytest.mark.parametrize("method", ["resnik", "lin", "jc", "jaccard"])
+def test_similarity_methods_nonzero_for_siblings(ontology, method):
+    # Perimembranous vs muscular VSD share the specific VSD parent -> every method > 0.
+    assert ontology.similarity("HP:0011682", "HP:0011623", method=method) > 0.0
+
+
+def test_jaccard_self_is_one(ontology):
+    assert ontology.similarity("HP:0001250", "HP:0001250", method="jaccard") == 1.0
+
+
+def test_unknown_method_raises(ontology):
+    with pytest.raises(ValueError):
+        ontology.similarity("HP:0001250", "HP:0001250", method="bogus")
+
+
+def test_similarity_unknown_id_is_zero(ontology):
+    assert ontology.similarity("HP:9999999", "HP:9999999", method="lin") == 0.0
+
+
+def test_bad_ic_basis_raises():
+    from clineval.core.ontology.hpo import Ontology
+    with pytest.raises(ValueError):
+        Ontology(ic_basis="not_a_basis")

@@ -28,3 +28,12 @@ def test_semantic_aggregate_keys_present(ontology):
     for key in ["sem_precision", "sem_recall", "sem_f1",
                 "sem_precision_icw", "sem_recall_icw", "sem_f1_icw", "bma"]:
         assert key in result.aggregate
+
+
+def test_semantic_invariant_holds_on_duplicated_predictions(ontology):
+    from clineval.tasks.hpo_extraction.metrics import Tier1ExactMetric
+    rec = _rec("r1", ["HP:0011682"], ["HP:0011682", "HP:0001250", "HP:0001250"])
+    ctx = EvalContext(ontology=ontology)
+    sem_f1 = Tier2SemanticMetric().compute([rec], ctx).per_document["r1"]["sem_f1"]
+    exact_f1 = Tier1ExactMetric().compute([rec], ctx).per_document["r1"]["f1"]
+    assert sem_f1 >= exact_f1

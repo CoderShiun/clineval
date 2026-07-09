@@ -55,3 +55,13 @@ def test_high_ic_spurious_fp_flag_and_zero_categories(ontology):
     assert result.aggregate["spurious"] == 1.0
     assert result.aggregate["wrong_granularity"] == 0.0
     assert result.aggregate["wrong_term"] == 0.0
+
+
+def test_generic_ancestor_does_not_suppress_missed(ontology):
+    # Predicting only the root (ancestor of everything) must NOT hide genuinely-missed golds.
+    rec = _rec("r1", ["HP:0001250", "HP:0000252"], ["HP:0000118"])
+    result = Tier3ClinicalMetric().compute(
+        [rec], EvalContext(ontology=ontology, config={"ic_high_threshold": 0.0})
+    )
+    assert result.aggregate["missed"] == 2.0
+    assert {f["type"] for f in result.details["flags"]} == {"missed_high_ic"}

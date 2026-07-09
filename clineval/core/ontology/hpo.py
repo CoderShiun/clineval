@@ -12,6 +12,7 @@ from clineval.core.ontology.ic import term_ic
 from clineval.core.ontology.similarity import (
     bma as _bma,
     is_ancestor_or_descendant,
+    jaccard,
     pairwise,
 )
 
@@ -28,6 +29,8 @@ class TermResolution:
 class Ontology:
     """Loaded HPO ontology + semantic-similarity helpers."""
 
+    _METHODS = frozenset({"resnik", "lin", "jc", "jc2", "rel", "ic", "dist", "jaccard"})
+
     def __init__(self, ic_basis: str = "omim") -> None:
         from pyhpo import Ontology as _PyOntology
 
@@ -35,6 +38,13 @@ class Ontology:
         self._onto = _PyOntology
         self.ic_basis = ic_basis
         self._alt_index = self._build_alt_index()
+
+        probe = self._lookup("HP:0000118")  # "Phenotypic abnormality" (always present)
+        if probe is None or getattr(probe.information_content, self.ic_basis, None) is None:
+            raise ValueError(
+                f"unknown ic_basis {self.ic_basis!r}; expected one of the pyhpo "
+                "information_content fields (e.g. 'omim', 'gene', 'orpha', 'decipher')"
+            )
 
     @property
     def version(self) -> str:
@@ -61,6 +71,10 @@ class Ontology:
         index: dict[str, str] = {}
         try:
             for term in self._onto:
+                # Skip obsolete terms so an obsolete-retained term's alt_id can
+                # never resolve back to it.
+                if getattr(term, "is_obsolete", False):
+                    continue
                 # PyHPO 4.0.0 exposes secondary/legacy IDs as `alt_id`
                 # (the brief's original `alternative_ids` does not exist).
                 for alt in getattr(term, "alt_id", None) or []:
@@ -72,7 +86,9 @@ class Ontology:
     def _lookup(self, hpo_id: str):
         try:
             return self._onto.get_hpo_object(hpo_id)
-        except Exception:
+        except RuntimeError:
+            # pyhpo 4.0.0 raises RuntimeError("Unknown HPO term") for an
+            # unresolvable id; any other exception is real API drift -> propagate.
             return None
 
     def resolve(self, hpo_id: str) -> TermResolution:
@@ -99,11 +115,20 @@ class Ontology:
         return term_ic(term, self.ic_basis) if term is not None else 0.0
 
     def similarity(self, id1: str, id2: str, method: str = "lin") -> float:
-        if id1 == id2:
-            return 1.0 if method in ("lin", "jc") else self.ic(id1)
-        t1, t2 = self._lookup(id1), self._lookup(id2)
-        if t1 is None or t2 is None:
+        if method not in self._METHODS:
+            raise ValueError(
+                f"unknown similarity method {method!r}; choose from {sorted(self._METHODS)}"
+            )
+        t1 = self._lookup(id1)
+        if t1 is None:
             return 0.0
+        t2 = t1 if id2 == id1 else self._lookup(id2)
+        if t2 is None:
+            return 0.0
+        if method == "jaccard":
+            return jaccard(t1, t2)
+        if id1 == id2 and method in ("lin", "jc"):
+            return 1.0
         return pairwise(t1, t2, method=method, basis=self.ic_basis)
 
     def bma(self, ids1: list[str], ids2: list[str], method: str = "lin") -> float:

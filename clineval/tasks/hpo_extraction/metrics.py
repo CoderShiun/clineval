@@ -56,6 +56,8 @@ def _best(ontology, term_id: str, group: list[str], method: str) -> float:
 
 
 def _semantic_doc(ontology, gold: list[str], pred: list[str], method: str) -> dict[str, float]:
+    gold = list(dict.fromkeys(gold))
+    pred = list(dict.fromkeys(pred))
     if not gold and not pred:
         return {k: 1.0 for k in _SEM_KEYS}
 
@@ -136,9 +138,11 @@ class Tier3ClinicalMetric(Metric):
         per_doc: dict[str, dict[str, float]] = {}
 
         for r in records:
-            gold_set, pred_set = set(r.gold_reference), set(r.system_output)
-            residual_pred = [p for p in r.system_output if p not in gold_set]
-            residual_gold = [g for g in r.gold_reference if g not in pred_set]
+            gold_list = list(dict.fromkeys(r.gold_reference))
+            pred_list = list(dict.fromkeys(r.system_output))
+            gold_set, pred_set = set(gold_list), set(pred_list)
+            residual_pred = [p for p in pred_list if p not in gold_set]
+            residual_gold = [g for g in gold_list if g not in pred_set]
             doc = {k: 0 for k in _TAXONOMY_KEYS}
 
             for p in residual_pred:
@@ -157,14 +161,16 @@ class Tier3ClinicalMetric(Metric):
                 totals[category] += 1
 
             for g in residual_gold:
-                # A gold term is "missed" only if no prediction approximately
-                # captured it (no ancestor/descendant and no related term above
-                # tau). A near counterpart is already scored on the prediction
-                # side as wrong_granularity / wrong_term, so counting it here too
-                # would double-count and wrongly raise a missed-high-IC alarm.
+                # A gold term is "missed" only if no prediction genuinely captured
+                # it (similarity >= tau). We deliberately do NOT treat an
+                # ancestor/descendant relation as "near" here: the ontology root is
+                # an ancestor of every term, so an unbounded related() disjunct would
+                # let a single generic prediction mark all golds as near and silence
+                # legitimately-missed alarms. Real close ancestors (e.g. parent VSD
+                # vs child, Lin ~0.68) still clear tau, so genuine wrong-granularity
+                # suppression is preserved.
                 near = any(
-                    onto.related(p, g) or onto.similarity(p, g, method=method) >= tau
-                    for p in residual_pred
+                    onto.similarity(p, g, method=method) >= tau for p in residual_pred
                 )
                 if near:
                     continue

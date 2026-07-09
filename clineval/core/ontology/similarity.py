@@ -10,8 +10,6 @@ def pairwise(term1: object, term2: object, method: str = "lin", basis: str = "om
     except TypeError:
         # Fallback for a keyword-only signature variant.
         return float(term1.similarity_score(other=term2, kind=basis, method=method))
-    except Exception:
-        return 0.0
 
 
 def bma(ontology: object, ids1: list[str], ids2: list[str], method: str = "lin") -> float:
@@ -44,3 +42,13 @@ def is_ancestor_or_descendant(term1: object, term2: object) -> bool:
     if term1.id == term2.id:
         return False
     return term2.id in _ancestors(term1) or term1.id in _ancestors(term2)
+
+
+def jaccard(term1: object, term2: object) -> float:
+    """Jaccard overlap of the two terms' ancestor sets (each set includes the term itself)."""
+    a = _ancestors(term1) | {term1.id}
+    b = _ancestors(term2) | {term2.id}
+    union = a | b
+    if not union:
+        return 0.0
+    return len(a & b) / len(union)
