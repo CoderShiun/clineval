@@ -45,7 +45,10 @@ The seam that makes Module B cheap later: **a Task = (dataset schema + adapter +
 
 ```
 clineval/
-├── pyproject.toml                 # uv, Python 3.11+
+├── pyproject.toml                 # uv, latest Python (3.14); runs via Docker
+├── Dockerfile                     # python:3.14-slim + uv + deps
+├── compose.yaml                   # dev/run service; bind-mounts repo
+├── .dockerignore
 ├── README.md                      # English, portfolio-quality
 ├── LICENSE                        # MIT
 ├── .gitignore
@@ -222,7 +225,7 @@ clineval run \
   [--live] [--base-url http://localhost:1234/v1] [--model <name>] [--api-key <key>]
 ```
 
-The same pipeline is callable from the notebook / a plain script.
+The same pipeline is callable from the notebook / a plain script. **Docker note:** because the CLI runs inside a container, `--live` must reach the host's LM Studio via `--base-url http://host.docker.internal:1234/v1` (not `localhost`); the offline default path needs no network.
 
 ---
 
@@ -244,19 +247,22 @@ PyHPO-backed tests load the real ontology once (shared fixture).
 
 ## 11. Tooling & conventions
 
-- **Python 3.11+**, packaged with **uv** + `pyproject.toml`.
+- **Everything runs in Docker / docker compose. Nothing is installed on the host machine** (no host Python, no host uv). The one dev/run image builds the toolchain; all `uv` / `pytest` / `clineval` commands execute via `docker compose run --rm clineval <cmd>`.
+- **Latest Python** — target **3.14** (the current release) via the container base image; the floor is set so a one-line base-image change drops to the latest previous minor if a dependency lacks 3.14 wheels at build time.
+- Packaged with **uv** + `pyproject.toml`; `uv` resolves the **newest compatible** version of each dependency (no upper pins).
 - Runtime deps: `pyhpo`, `openai`, `typer`, `jinja2`. Dev: `pytest`, `ruff`.
 - `reports/` and downloaded datasets are git-ignored.
 - All code, comments, docstrings, README, and docs in **English**.
-- **PUBLIC data only. No PHI.** Runs fully locally (on-prem). Permissive licenses only.
+- **PUBLIC data only. No PHI.** Runs fully locally (on-prem, containerized). Permissive licenses only.
 - **MIT `LICENSE`** at repo root.
 
 ---
 
 ## 12. Known risks / to verify during implementation
 
-- **Python & `uv` are not installed on this machine** — required before the demo can run; flag when we reach execution.
-- **PyHPO API specifics** (exact method names for IC kind, `similarity_score`, `HPOSet` BMA, alt_id lookup) verified in the first ontology task; the wrapper isolates any surprises.
+- **Docker Desktop must be running** — the CLI is installed but the daemon was stopped when this plan was written. Start it before the first task builds the image. No host Python/uv is installed (by design — everything is containerized).
+- **Python 3.14 dependency support** — if PyHPO or another dependency lacks 3.14 wheels at build time, drop the base image to the latest previous minor (e.g. `python:3.13-slim`) and the `requires-python` floor accordingly; this is a one-line change thanks to Docker. The ontology smoke test (Task 7) surfaces any runtime incompatibility immediately.
+- **PyHPO API specifics** (exact method names for IC kind, `similarity_score`, BMA, alt_id lookup) and **whether PyHPO bundles its ontology data or fetches it at runtime** are verified in the first ontology task; the wrapper isolates any surprises. If data is fetched at runtime, mount a cache volume so it persists across container runs.
 - **GSC+ license & on-disk format** confirmed before the loader/downloader is finalized.
 - **Local-model HPO-ID output quality** is low by nature; the adapter tolerates unresolvable outputs (they score as errors — realistic).
 - **Deferred:** Lin-similarity floor for semantic P/R (avoid crediting distant coincidental ancestry); `replaced_by` remapping of obsolete IDs; BioCreative VIII loader; HTML report.

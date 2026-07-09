@@ -6,22 +6,39 @@
 
 **Architecture:** A task-agnostic `core/` (schema, dataset loading, metric base + task-keyed registry, evaluator, report) with a PyHPO-backed `core/ontology/` layer. Module A lives under `tasks/hpo_extraction/` (metrics for Tiers 1–3, a pluggable extractor, HPO-ID adapters, dataset loader). A task = (dataset schema + adapter + metric set + report template); the metric registry dispatches by task name so future tasks (Module B) are additive without touching Module A.
 
-**Tech Stack:** Python 3.11+, uv, PyHPO (ontology / IC / semantic similarity), openai (OpenAI-compatible LLM client), Typer (CLI), Jinja2 (report), pytest (tests).
+**Tech Stack:** Latest Python (target **3.14**), uv, PyHPO (ontology / IC / semantic similarity), openai (OpenAI-compatible LLM client), Typer (CLI), Jinja2 (report), pytest (tests). **All execution is containerized (Docker / docker compose) — nothing is installed on the host.**
 
 ## Global Constraints
 
-- Python **>=3.11**; packaged with **uv** + `pyproject.toml`.
-- Runtime deps only: `pyhpo>=3.1.4`, `openai>=1.0`, `typer>=0.12`, `jinja2>=3.1`. Dev deps: `pytest>=8.0`, `ruff>=0.5`. **No DeepEval, RAGAS, RAG, scikit-learn.**
+- **Everything runs in Docker.** No host Python / uv / pip installs. Every `uv` / `pytest` / `python` / `clineval` command in this plan runs **inside the container** — see "Execution Environment" below.
+- **Latest Python** — target **3.14** via the container base image. `requires-python = ">=3.14"`; if a dependency lacks 3.14 wheels at build time, drop the base image + floor to `3.13` (a one-line change, noted in Task 1).
+- Packaged with **uv** + `pyproject.toml`. Dependency constraints use `>=` floors with **no upper pins**, so `uv` resolves the **newest compatible** version of each: `pyhpo`, `openai`, `typer`, `jinja2` (runtime); `pytest`, `ruff` (dev). **No DeepEval, RAGAS, RAG, scikit-learn.**
 - All code, comments, docstrings, README, docs in **English**.
-- **PUBLIC data only. No PHI.** Runs fully locally (on-prem). Permissive licenses only. **MIT `LICENSE`** at repo root.
+- **PUBLIC data only. No PHI.** Runs fully locally (on-prem, containerized). Permissive licenses only. **MIT `LICENSE`** at repo root.
 - Metrics are **document-level, macro-averaged**. No mention-level/boundary metrics.
 - HPO IDs are normalized to colon form: `HP_0000110` / `hp:0000110` → **`HP:0000110`**, applied to **both** gold and predictions before any lookup.
 - Version alignment policy: resolve `alt_id → primary`; **flag** merged/obsolete (count + list), exclude from scoring, **no `replaced_by` auto-remap** in the MVP.
 - Semantic P/R/F1 = asymmetric best-match on **Lin** (0–1), plus IC-weighted variants. No Lin floor in the MVP.
-- Demo extractor defaults to **cached predictions**; `--live` calls LM Studio (`http://localhost:1234/v1` default). Cached file records the producing **model/version**.
+- Demo extractor defaults to **cached predictions**; `--live` calls an OpenAI-compatible endpoint. From inside Docker the host's LM Studio is reached at `http://host.docker.internal:1234/v1` (not `localhost`). Cached file records the producing **model/version**.
 - Report is **Markdown only**. Regulatory table labels ISO clauses as **ISO 15189:2022**.
 - Module B: **placeholder folder + docstring only** — do not implement.
 - Every task is TDD (red → green → refactor) and ends with a commit. PyHPO is touched **only** inside `core/ontology/`.
+
+---
+
+## Execution Environment (Docker) — read before Task 1
+
+**Prerequisite:** Docker Desktop must be **running** (the daemon was stopped when this plan was written; `docker`/`docker compose` CLIs are installed). Nothing else is installed on the host.
+
+**Convention used by every task:** each step shows commands like `uv run pytest ...`. Run each **inside the container**:
+
+```bash
+docker compose run --rm clineval <command>
+# e.g.  docker compose run --rm clineval uv run pytest tests/test_schema.py -v
+#       docker compose run --rm clineval uv run clineval run --dataset synthetic --report reports/report.md
+```
+
+The repo is bind-mounted into `/app`, so edits on the host are seen immediately and files the container writes (reports, git commits) land on the host. The uv virtualenv lives at `/opt/venv` (outside the mount) so it is not shadowed. `git commit` steps run on the **host** (or in-container — either works, same repo). Build the image once in Task 1; subsequent `docker compose run` calls are fast (deps cached in the image layer).
 
 ---
 
@@ -29,6 +46,9 @@
 
 **Files:**
 - Create: `pyproject.toml`
+- Create: `Dockerfile`
+- Create: `compose.yaml`
+- Create: `.dockerignore`
 - Create: `LICENSE`
 - Create: `README.md`
 - Create: `.gitignore` (replace existing)
@@ -36,18 +56,17 @@
 - Test: `tests/test_smoke.py`
 
 **Interfaces:**
-- Produces: an importable `clineval` package (version `0.1.0`) and a working `pytest`/`uv` toolchain that every later task relies on.
+- Produces: an importable `clineval` package (version `0.1.0`) and a working containerized `pytest`/`uv` toolchain that every later task relies on.
 
-- [ ] **Step 1: Prerequisite — install Python 3.11+ and uv (one-time, machine-level)**
+- [ ] **Step 1: Prerequisite — Docker Desktop running (no host installs)**
 
-This machine has neither on PATH. Install uv (which can manage Python):
+Do **not** install Python or uv on the host. Confirm Docker is up:
 ```bash
-# Windows PowerShell:
-#   powershell -ExecutionPolicy ByPass -c "irm https://astral.sh/uv/install.ps1 | iex"
-uv --version
-uv python install 3.11
+docker --version
+docker compose version
+docker info --format '{{.ServerVersion}}'
 ```
-Expected: `uv` prints a version; Python 3.11 becomes available to uv.
+Expected: all three print (a server version means the daemon is running). If the last one errors, **start Docker Desktop** and retry. The image (built in Step 9) provides Python 3.14 + uv + all deps.
 
 - [ ] **Step 2: Write `pyproject.toml`**
 
@@ -57,19 +76,20 @@ name = "clineval"
 version = "0.1.0"
 description = "Open-source, self-hostable evaluation toolkit for clinical LLM outputs. Module A: HPO extraction evaluation."
 readme = "README.md"
-requires-python = ">=3.11"
+requires-python = ">=3.14"
 license = { text = "MIT" }
 authors = [{ name = "ClinEval contributors" }]
 keywords = ["clinical", "evaluation", "HPO", "phenotype", "LLM", "regulatory"]
+# Floors only (no upper pins): uv resolves the newest compatible version of each.
 dependencies = [
     "pyhpo>=3.1.4",
-    "openai>=1.0",
+    "openai>=1.40",
     "typer>=0.12",
     "jinja2>=3.1",
 ]
 
 [project.optional-dependencies]
-dev = ["pytest>=8.0", "ruff>=0.5"]
+dev = ["pytest>=8.0", "ruff>=0.6"]
 
 [project.scripts]
 clineval = "clineval.cli:app"
@@ -87,8 +107,10 @@ addopts = "-q"
 
 [tool.ruff]
 line-length = 100
-target-version = "py311"
+target-version = "py314"
 ```
+
+> **3.14 fallback:** if `uv sync` fails because a dependency has no 3.14 wheel yet, change `requires-python` to `">=3.13"`, set `target-version = "py313"`, and change the Dockerfile base image tag to `3.13-slim` — nothing else changes.
 
 - [ ] **Step 3: Write `LICENSE` (MIT)**
 
@@ -146,13 +168,14 @@ datasets/gsc_plus/
 
 > **Disclaimer:** General technical/educational reference, not legal or regulatory-compliance advice. Confirm dataset licenses before use and consult qualified regulatory/quality professionals against current official texts.
 
-## Quickstart
+## Quickstart (Docker — no host installs)
 
 ```bash
-uv sync --extra dev
-uv run clineval run --task hpo_extraction --dataset synthetic --report reports/report.md
+docker compose build
+docker compose run --rm clineval uv run clineval run --dataset synthetic --report reports/report.md
 ```
 
+For a live run against a local LM Studio on the host, add `--live --base-url http://host.docker.internal:1234/v1`.
 See `examples/hpo_extraction_demo.ipynb` for a notebook walkthrough.
 
 ## License
@@ -199,20 +222,80 @@ def test_package_version():
     assert clineval.__version__ == "0.1.0"
 ```
 
-- [ ] **Step 8: Sync env and run the smoke test**
+- [ ] **Step 8: Write `Dockerfile`, `compose.yaml`, `.dockerignore`**
+
+`Dockerfile`:
+```dockerfile
+# Latest Python (see the 3.14 fallback note in Step 2 if a dep lacks 3.14 wheels).
+FROM python:3.14-slim
+
+# uv installs into a venv OUTSIDE /app so the runtime bind-mount does not shadow it.
+ENV UV_PROJECT_ENVIRONMENT=/opt/venv \
+    UV_COMPILE_BYTECODE=1 \
+    UV_LINK_MODE=copy \
+    PYTHONUNBUFFERED=1 \
+    PATH="/opt/venv/bin:${PATH}"
+
+RUN pip install --no-cache-dir uv
+
+WORKDIR /app
+
+# Layer-cache dependencies: copy only manifests first, sync deps without the project.
+COPY pyproject.toml ./
+RUN uv sync --extra dev --no-install-project
+
+# Copy the rest and install the project itself (editable).
+COPY . .
+RUN uv sync --extra dev
+
+CMD ["uv", "run", "pytest", "-q"]
+```
+
+`compose.yaml`:
+```yaml
+services:
+  clineval:
+    build: .
+    working_dir: /app
+    environment:
+      - UV_PROJECT_ENVIRONMENT=/opt/venv
+    volumes:
+      - .:/app                      # host repo is the source of truth
+      - pyhpo-cache:/root/.cache    # persist any PyHPO/uv runtime cache
+    extra_hosts:
+      - "host.docker.internal:host-gateway"   # reach host LM Studio for --live
+
+volumes:
+  pyhpo-cache:
+```
+
+`.dockerignore`:
+```gitignore
+.git
+.venv
+__pycache__
+*.pyc
+.pytest_cache
+.ruff_cache
+reports
+datasets/gsc_plus
+docs/Self
+```
+
+- [ ] **Step 9: Build the image and run the smoke test (in the container)**
 
 Run:
 ```bash
-uv sync --extra dev
-uv run pytest tests/test_smoke.py -v
+docker compose build
+docker compose run --rm clineval uv run pytest tests/test_smoke.py -v
 ```
-Expected: dependencies install; the test PASSES.
+Expected: the image builds (installs Python 3.14 + uv + deps); the smoke test PASSES. From here on, every `uv ...` / `pytest ...` / `clineval ...` command runs via `docker compose run --rm clineval <command>`.
 
-- [ ] **Step 9: Commit**
+- [ ] **Step 10: Commit**
 
 ```bash
 git add -A
-git commit -m "chore: scaffold clineval package, tooling, MIT license"
+git commit -m "chore: scaffold clineval package, Docker toolchain, MIT license"
 ```
 
 ---
@@ -1300,9 +1383,11 @@ def test_spurious_unrelated_fp(ontology):
 
 def test_wrong_term_for_sibling(ontology):
     # gold = muscular VSD; predicted sibling perimembranous VSD (related, not parent/child).
+    # Siblings share the specific VSD parent, so their Lin is comfortably > 0.1;
+    # a low tau keeps this robust to exact IC values while still excluding unrelated terms.
     rec = _rec("r1", ["HP:0011623"], ["HP:0011682"])
     result = Tier3ClinicalMetric().compute(
-        [rec], EvalContext(ontology=ontology, config={"relatedness_tau": 0.2})
+        [rec], EvalContext(ontology=ontology, config={"relatedness_tau": 0.1})
     )
     assert result.aggregate["wrong_term"] == 1.0
 
@@ -2502,8 +2587,8 @@ ClinEval does **not** commit third-party corpora. Fetch GSC+ with the downloader
 228 PubMed abstracts annotated with HPO concepts (Lobo et al., 2017).
 
 ```bash
-python datasets/download_gsc.py            # writes datasets/gsc_plus/gsc_plus.jsonl (git-ignored)
-uv run clineval run --dataset gsc --report reports/gsc.md
+docker compose run --rm clineval python datasets/download_gsc.py   # writes datasets/gsc_plus/gsc_plus.jsonl (git-ignored)
+docker compose run --rm clineval uv run clineval run --dataset gsc --report reports/gsc.md
 ```
 
 **Before running:** confirm the current download source and its **license** permit
@@ -2519,12 +2604,12 @@ Documented fast-follow (not in this MVP). Add a `BioCreativeLoader` in
 
 - [ ] **Step 6: Run the converter test and verify the offline demo end-to-end**
 
-Run:
+Run (in the container):
 ```bash
-uv run pytest tests/test_download_gsc.py -v
-uv run clineval run --dataset synthetic --report reports/report.md
+docker compose run --rm clineval uv run pytest tests/test_download_gsc.py -v
+docker compose run --rm clineval uv run clineval run --dataset synthetic --report reports/report.md
 ```
-Expected: converter test PASSES; the CLI writes `reports/report.md`. Open it and confirm: exact F1 < semantic F1 (positive gap), taxonomy counts populated (syn01 wrong-granularity, syn06 wrong-term, syn04/syn10 spurious, syn04/syn05 missed), and the Ontology Alignment + Regulatory Evidence Mapping sections render. **Also confirm the real GSC+ source URL + license before relying on `download()`** (this is the license-confirmation gate from the spec).
+Expected: converter test PASSES; the CLI writes `reports/report.md`. Open it and confirm: **exact F1 < semantic F1** (positive gap); **all four taxonomy categories are exercised across the corpus** (a near-miss parent → wrong-granularity, a sibling → wrong-term, an unrelated FP → spurious, an unmatched gold → missed); at least one clinical-significance flag; and the Ontology Alignment + Regulatory Evidence Mapping sections render. (Exact per-document category assignments depend on the live PyHPO IC values and the default `relatedness_tau=0.3`, so verify the *category totals are non-zero* rather than pinning each document.) **Also confirm the real GSC+ source URL + license before relying on `download()`** (the license-confirmation gate from the spec).
 
 - [ ] **Step 7: Commit**
 
@@ -2587,22 +2672,22 @@ Markdown(render_report(result))
 
 - [ ] **Step 2: Expand `README.md`**
 
-Replace the stub with a portfolio-grade README covering: what ClinEval is (evaluator, not model-builder), the three metric tiers, the exact-vs-semantic gap as the headline insight, the regulatory-evidence mapping, install/run (`uv sync --extra dev`; `uv run clineval run ...`; `--live` for LM Studio), the architecture (generic core + pluggable task; Module B seam), datasets (GSC+ downloader; synthetic fixture), on-prem/public-data/no-PHI stance, and the disclaimer. Keep it concise and skimmable.
+Replace the stub with a portfolio-grade README covering: what ClinEval is (evaluator, not model-builder), the three metric tiers, the exact-vs-semantic gap as the headline insight, the regulatory-evidence mapping, **Docker install/run** (`docker compose build`; `docker compose run --rm clineval uv run clineval run ...`; `--live --base-url http://host.docker.internal:1234/v1` for host LM Studio), the architecture (generic core + pluggable task; Module B seam), datasets (GSC+ downloader; synthetic fixture), on-prem/public-data/no-PHI stance, and the disclaimer. Keep it concise and skimmable.
 
-- [ ] **Step 3: Run the full suite (green gate)**
+- [ ] **Step 3: Run the full suite (green gate, in the container)**
 
 Run:
 ```bash
-uv run pytest -v
-uv run ruff check .
+docker compose run --rm clineval uv run pytest -v
+docker compose run --rm clineval uv run ruff check .
 ```
 Expected: **all tests pass**; ruff clean (fix any lint). Confirm `reports/report.md` from Task 17 still generates.
 
-- [ ] **Step 4: Verify the notebook executes (optional if jupyter available)**
+- [ ] **Step 4: Verify the notebook executes**
 
 Run:
 ```bash
-uv run --with jupyter jupyter nbconvert --to notebook --execute examples/hpo_extraction_demo.ipynb --output executed_demo.ipynb
+docker compose run --rm clineval uv run --with jupyter jupyter nbconvert --to notebook --execute examples/hpo_extraction_demo.ipynb --output executed_demo.ipynb
 ```
 Expected: executes without error (then delete `examples/executed_demo.ipynb`). If jupyter isn't desired, manually spot-check the cells against the CLI output instead.
 
@@ -2626,7 +2711,9 @@ git commit -m "docs: add notebook demo and portfolio README"
 - §6 datasets (JSONL, GscPlusLoader, downloader, fixtures; BC8 deferred) → Tasks 3, 13, 17.
 - §7 report sections → Task 15 (template covers all 8 sections incl. IC basis + provenance + gap).
 - §8 regulatory mapping (ISO 15189:2022) → Task 14 (test asserts 7.3.x, no 5.5).
-- §9 CLI → Task 16. §10 testing → every task is TDD; full green gate in Task 18. §11 tooling/MIT → Task 1. §12 risks → surfaced in Tasks 7 (PyHPO), 17 (GSC+ license/format).
+- §9 CLI → Task 16. §10 testing → every task is TDD; full green gate in Task 18. §11 tooling/MIT/**Docker + latest Python (3.14)** → Task 1 (Dockerfile/compose/.dockerignore, `requires-python>=3.14` with a 3.13 fallback note). §12 risks → surfaced in Tasks 1 (Docker daemon, 3.14 dep support), 7 (PyHPO), 17 (GSC+ license/format).
+
+**Execution model:** all `uv`/`pytest`/`python`/`clineval` commands run inside the container (`docker compose run --rm clineval …`) per the "Execution Environment" section; git commits run on the host. No host Python/uv is installed.
 
 **2. Placeholder scan:** No "TBD/implement later" in code. The single deliberate placeholder is `tasks/report_generation` (spec-mandated Module B stub). `download_gsc.py`'s URL/format carry explicit "verify before use" notes (a runtime license/format gate from the spec), not code placeholders — the converter is fully implemented and tested against a committed sample.
 
