@@ -112,3 +112,60 @@ class Tier2SemanticMetric(Metric):
         }
         aggregate = macro_average(per_doc, _SEM_KEYS)
         return MetricResult(name=self.name, aggregate=aggregate, per_document=per_doc)
+
+
+_TAXONOMY_KEYS = ["missed", "spurious", "wrong_granularity", "wrong_term"]
+
+
+@register_metric("hpo_extraction")
+class Tier3ClinicalMetric(Metric):
+    """Clinical error taxonomy + clinical-significance flags."""
+
+    name = "tier3_clinical"
+
+    def compute(
+        self, records: list[PredictionRecord], context: EvalContext
+    ) -> MetricResult:
+        onto = context.ontology
+        tau = context.config.get("relatedness_tau", 0.3)
+        ic_high = context.config.get("ic_high_threshold", 3.0)
+        method = context.config.get("similarity_method", "lin")
+
+        totals = {k: 0 for k in _TAXONOMY_KEYS}
+        flags: list[dict] = []
+        per_doc: dict[str, dict[str, float]] = {}
+
+        for r in records:
+            gold_set, pred_set = set(r.gold_reference), set(r.system_output)
+            residual_pred = [p for p in r.system_output if p not in gold_set]
+            residual_gold = [g for g in r.gold_reference if g not in pred_set]
+            doc = {k: 0 for k in _TAXONOMY_KEYS}
+
+            for p in residual_pred:
+                if any(onto.related(p, g) for g in gold_set):
+                    category = "wrong_granularity"
+                elif max((onto.similarity(p, g, method=method) for g in gold_set),
+                         default=0.0) >= tau:
+                    category = "wrong_term"
+                else:
+                    category = "spurious"
+                    ic_p = onto.ic(p)
+                    if ic_p >= ic_high:
+                        flags.append({"record": r.id, "type": "high_ic_spurious_fp",
+                                      "hpo_id": p, "ic": round(ic_p, 3)})
+                doc[category] += 1
+                totals[category] += 1
+
+            for g in residual_gold:
+                doc["missed"] += 1
+                totals["missed"] += 1
+                ic_g = onto.ic(g)
+                if ic_g >= ic_high:
+                    flags.append({"record": r.id, "type": "missed_high_ic",
+                                  "hpo_id": g, "ic": round(ic_g, 3)})
+
+            per_doc[r.id] = {k: float(v) for k, v in doc.items()}
+
+        aggregate = {k: float(v) for k, v in totals.items()}
+        return MetricResult(name=self.name, aggregate=aggregate,
+                            per_document=per_doc, details={"flags": flags})
