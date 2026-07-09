@@ -43,3 +43,72 @@ class Tier1ExactMetric(Metric):
         per_doc = {r.id: _exact_prf(r.gold_reference, r.system_output) for r in records}
         aggregate = macro_average(per_doc, ["precision", "recall", "f1"])
         return MetricResult(name=self.name, aggregate=aggregate, per_document=per_doc)
+
+
+_SEM_KEYS = [
+    "sem_precision", "sem_recall", "sem_f1",
+    "sem_precision_icw", "sem_recall_icw", "sem_f1_icw", "bma",
+]
+
+
+def _best(ontology, term_id: str, group: list[str], method: str) -> float:
+    return max((ontology.similarity(term_id, g, method=method) for g in group), default=0.0)
+
+
+def _semantic_doc(ontology, gold: list[str], pred: list[str], method: str) -> dict[str, float]:
+    if not gold and not pred:
+        return {k: 1.0 for k in _SEM_KEYS}
+
+    if pred:
+        sem_p = sum(_best(ontology, p, gold, method) for p in pred) / len(pred)
+    else:
+        sem_p = 1.0 if not gold else 0.0
+    if gold:
+        sem_r = sum(_best(ontology, g, pred, method) for g in gold) / len(gold)
+    else:
+        sem_r = 1.0 if not pred else 0.0
+
+    def ic_weighted(items: list[str], other: list[str]) -> float:
+        num = den = 0.0
+        for x in items:
+            weight = ontology.ic(x)
+            num += weight * _best(ontology, x, other, method)
+            den += weight
+        return num / den if den else 0.0
+
+    if pred:
+        sem_p_icw = ic_weighted(pred, gold)
+    else:
+        sem_p_icw = 1.0 if not gold else 0.0
+    if gold:
+        sem_r_icw = ic_weighted(gold, pred)
+    else:
+        sem_r_icw = 1.0 if not pred else 0.0
+
+    return {
+        "sem_precision": sem_p,
+        "sem_recall": sem_r,
+        "sem_f1": harmonic(sem_p, sem_r),
+        "sem_precision_icw": sem_p_icw,
+        "sem_recall_icw": sem_r_icw,
+        "sem_f1_icw": harmonic(sem_p_icw, sem_r_icw),
+        "bma": (sem_p + sem_r) / 2,
+    }
+
+
+@register_metric("hpo_extraction")
+class Tier2SemanticMetric(Metric):
+    """Semantic / hierarchy-aware P/R/F1 (best-match on Lin) + IC-weighted + BMA."""
+
+    name = "tier2_semantic"
+
+    def compute(
+        self, records: list[PredictionRecord], context: EvalContext
+    ) -> MetricResult:
+        method = context.config.get("similarity_method", "lin")
+        per_doc = {
+            r.id: _semantic_doc(context.ontology, r.gold_reference, r.system_output, method)
+            for r in records
+        }
+        aggregate = macro_average(per_doc, _SEM_KEYS)
+        return MetricResult(name=self.name, aggregate=aggregate, per_document=per_doc)
