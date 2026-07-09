@@ -9,7 +9,7 @@ from __future__ import annotations
 import re
 from typing import Iterable
 
-from clineval.core.schema import PredictionRecord
+from clineval.core.schema import OntologyAlignment, PredictionRecord
 
 _HPO_RE = re.compile(r"HP[:_](\d{7})", re.IGNORECASE)
 
@@ -55,3 +55,44 @@ def normalize_record(rec: PredictionRecord) -> PredictionRecord:
     rec.gold_reference = normalize_hpo_ids(rec.gold_reference)
     rec.system_output = normalize_hpo_ids(rec.system_output)
     return rec
+
+
+def _align_list(ontology, ids: list[str], counters: dict) -> list[str]:
+    resolved: list[str] = []
+    for hpo_id in ids:
+        res = ontology.resolve(hpo_id)
+        if res.status == "primary":
+            resolved.append(res.resolved)
+        elif res.status == "alt_id":
+            counters["alt"] += 1
+            resolved.append(res.resolved)
+        else:  # obsolete / unknown
+            counters["obsolete"] += 1
+            counters["obsolete_ids"].append(hpo_id)
+    seen: set[str] = set()
+    deduped: list[str] = []
+    for x in resolved:
+        if x not in seen:
+            seen.add(x)
+            deduped.append(x)
+    return deduped
+
+
+def align_records(records: list[PredictionRecord], ontology) -> tuple[list[PredictionRecord], OntologyAlignment]:
+    """Resolve alt_ids to primary and flag/drop obsolete IDs; summarize alignment."""
+    counters = {"alt": 0, "obsolete": 0, "obsolete_ids": []}
+    for rec in records:
+        rec.gold_reference = _align_list(ontology, rec.gold_reference, counters)
+        rec.system_output = _align_list(ontology, rec.system_output, counters)
+    alignment = OntologyAlignment(
+        hpo_version=ontology.version,
+        ic_basis=ontology.ic_basis,
+        alt_ids_resolved=counters["alt"],
+        obsolete_flagged=counters["obsolete"],
+        obsolete_ids=sorted(set(counters["obsolete_ids"])),
+        policy=(
+            "alt_id resolved to primary; merged/obsolete IDs flagged and excluded "
+            "from scoring (no replaced_by remap in the MVP)."
+        ),
+    )
+    return records, alignment
