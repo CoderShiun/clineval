@@ -53,7 +53,7 @@ None.
 - **HPO version:** {{ r.alignment.hpo_version }}
 - **IC basis:** {{ r.alignment.ic_basis }}
 - **alt_ids resolved:** {{ r.alignment.alt_ids_resolved }}
-- **Merged/obsolete flagged:** {{ r.alignment.obsolete_flagged }}{% if r.alignment.obsolete_ids %} ({{ r.alignment.obsolete_ids|join(', ') }}){% endif %}
+- **Merged/obsolete flagged:** {{ r.alignment.obsolete_flagged }}{{ obsolete_suffix }}
 - **Policy:** {{ r.alignment.policy }}
 
 ## Regulatory Evidence Mapping

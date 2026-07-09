@@ -48,3 +48,5 @@ def test_report_contains_key_sections():
     assert "0.300" in md or "0.30" in md
     assert "missed_high_ic" in md
     assert "not legal" in md.lower()    # disclaimer
+    assert "(HP:0000999)" in md                 # obsolete ids shown
+    assert "\n- **Policy:**" in md              # Policy stays on its own line
