@@ -83,6 +83,13 @@ def test_semantic_bma_is_average_of_precision_and_recall_in_partial_case(ontolog
     assert doc["bma"] == pytest.approx((doc["sem_precision"] + doc["sem_recall"]) / 2)
 
 
+def test_ic_weighted_perfect_match_of_zero_ic_term_is_one(ontology):
+    # HP:0000001 (ontology root) has IC 0; a perfect match must not report icw 0.0.
+    rec = _rec("r1", ["HP:0000001"], ["HP:0000001"])
+    doc = Tier2SemanticMetric().compute([rec], EvalContext(ontology=ontology)).per_document["r1"]
+    assert doc["sem_f1_icw"] == 1.0
+
+
 def test_semantic_invariant_holds_on_duplicated_predictions(ontology):
     from clineval.tasks.hpo_extraction.metrics import Tier1ExactMetric
     rec = _rec("r1", ["HP:0011682"], ["HP:0011682", "HP:0001250", "HP:0001250"])

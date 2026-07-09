@@ -72,11 +72,18 @@ def _semantic_doc(ontology, gold: list[str], pred: list[str], method: str) -> di
 
     def ic_weighted(items: list[str], other: list[str]) -> float:
         num = den = 0.0
+        matches: list[float] = []
         for x in items:
             weight = ontology.ic(x)
-            num += weight * _best(ontology, x, other, method)
+            match = _best(ontology, x, other, method)
+            matches.append(match)
+            num += weight * match
             den += weight
-        return num / den if den else 0.0
+        if den:
+            return num / den
+        # Every term has IC 0 (very broad terms): fall back to the unweighted
+        # mean so a flawless match of zero-IC terms is not understated to 0.0.
+        return sum(matches) / len(matches) if matches else 0.0
 
     if pred:
         sem_p_icw = ic_weighted(pred, gold)
@@ -146,10 +153,18 @@ class Tier3ClinicalMetric(Metric):
             doc = {k: 0 for k in _TAXONOMY_KEYS}
 
             for p in residual_pred:
-                if any(onto.related(p, g) for g in gold_set):
+                # A residual prediction is "wrong_granularity" only if it is both
+                # hierarchically related to AND semantically close (>= tau) to the
+                # SAME gold term. The bare related() disjunct alone would let the
+                # root (ancestor of everything, Lin ~ 0) masquerade as a near-miss.
+                if any(
+                    onto.related(p, g) and onto.similarity(p, g, method=method) >= tau
+                    for g in gold_set
+                ):
                     category = "wrong_granularity"
-                elif max((onto.similarity(p, g, method=method) for g in gold_set),
-                         default=0.0) >= tau:
+                elif max(
+                    (onto.similarity(p, g, method=method) for g in gold_set), default=0.0
+                ) >= tau:
                     category = "wrong_term"
                 else:
                     category = "spurious"

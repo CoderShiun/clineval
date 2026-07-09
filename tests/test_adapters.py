@@ -19,6 +19,14 @@ def test_normalize_ids_dedupes_and_drops_invalid():
     assert adapters.normalize_hpo_ids(["HP_0000110", "HP:0000110", "junk"]) == ["HP:0000110"]
 
 
+def test_normalize_rejects_overlong_id():
+    assert adapters.normalize_hpo_id("HP:00012501") is None  # not truncated to HP:0001250
+
+
+def test_parse_llm_output_rejects_overlong_id():
+    assert adapters.parse_llm_output("HP:12345678") == []
+
+
 def test_parse_llm_output_extracts_ids():
     text = 'Terms: HP_0001250 (seizure), "HP:0000252". Also nonsense HP:99.'
     assert adapters.parse_llm_output(text) == ["HP:0001250", "HP:0000252"]

@@ -11,7 +11,7 @@ from typing import Iterable
 
 from clineval.core.schema import OntologyAlignment, PredictionRecord
 
-_HPO_RE = re.compile(r"HP[:_](\d{7})", re.IGNORECASE)
+_HPO_RE = re.compile(r"HP[:_](\d{7})(?!\d)", re.IGNORECASE)
 
 
 def normalize_hpo_id(raw: str | None) -> str | None:
@@ -57,7 +57,9 @@ def normalize_record(rec: PredictionRecord) -> PredictionRecord:
     return rec
 
 
-def _align_list(ontology, ids: list[str], counters: dict) -> list[str]:
+def _align_list(
+    ontology, ids: list[str], counters: dict, *, keep_unresolvable: bool
+) -> list[str]:
     resolved: list[str] = []
     for hpo_id in ids:
         res = ontology.resolve(hpo_id)
@@ -69,9 +71,13 @@ def _align_list(ontology, ids: list[str], counters: dict) -> list[str]:
         elif res.status == "obsolete":
             counters["obsolete"] += 1
             counters["obsolete_ids"].append(hpo_id)
+            if keep_unresolvable:
+                resolved.append(hpo_id)
         else:  # unknown
             counters["unknown"] += 1
             counters["unknown_ids"].append(hpo_id)
+            if keep_unresolvable:
+                resolved.append(hpo_id)
     seen: set[str] = set()
     deduped: list[str] = []
     for x in resolved:
@@ -91,20 +97,29 @@ def align_records(records: list[PredictionRecord], ontology) -> tuple[list[Predi
         "unknown_ids": [],
     }
     for rec in records:
-        rec.gold_reference = _align_list(ontology, rec.gold_reference, counters)
-        rec.system_output = _align_list(ontology, rec.system_output, counters)
+        # Gold: drop unplaceable terms (can't score against them). Predictions:
+        # retain obsolete/unknown IDs so hallucinations score as errors instead
+        # of silently vanishing.
+        rec.gold_reference = _align_list(
+            ontology, rec.gold_reference, counters, keep_unresolvable=False
+        )
+        rec.system_output = _align_list(
+            ontology, rec.system_output, counters, keep_unresolvable=True
+        )
+    obsolete_ids_unique = sorted(set(counters["obsolete_ids"]))
+    unknown_ids_unique = sorted(set(counters["unknown_ids"]))
     alignment = OntologyAlignment(
         hpo_version=ontology.version,
         ic_basis=ontology.ic_basis,
         alt_ids_resolved=counters["alt"],
-        obsolete_flagged=counters["obsolete"],
-        obsolete_ids=sorted(set(counters["obsolete_ids"])),
+        obsolete_flagged=len(obsolete_ids_unique),
+        obsolete_ids=obsolete_ids_unique,
         policy=(
-            "alt_id resolved to primary; obsolete (deprecated) and unknown "
-            "(unrecognized) IDs flagged and excluded from scoring (no replaced_by "
-            "remap in the MVP)."
+            "alt_id resolved to primary; gold obsolete/unknown IDs are flagged and "
+            "excluded from scoring; predicted obsolete/unknown IDs are retained so "
+            "they score as errors (no replaced_by remap in the MVP)."
         ),
-        unknown_flagged=counters["unknown"],
-        unknown_ids=sorted(set(counters["unknown_ids"])),
+        unknown_flagged=len(unknown_ids_unique),
+        unknown_ids=unknown_ids_unique,
     )
     return records, alignment

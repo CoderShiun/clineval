@@ -83,9 +83,33 @@ def test_tier3_aggregate_sums_counts_across_documents(ontology):
 
 def test_generic_ancestor_does_not_suppress_missed(ontology):
     # Predicting only the root (ancestor of everything) must NOT hide genuinely-missed golds.
+    # The root is also too far (Lin ~ 0 < tau) to count as wrong_granularity, so it lands
+    # in spurious and (with ic_high=0.0) raises a high_ic_spurious_fp flag alongside the
+    # two missed-gold flags.
     rec = _rec("r1", ["HP:0001250", "HP:0000252"], ["HP:0000118"])
     result = Tier3ClinicalMetric().compute(
         [rec], EvalContext(ontology=ontology, config={"ic_high_threshold": 0.0})
     )
     assert result.aggregate["missed"] == 2.0
-    assert {f["type"] for f in result.details["flags"]} == {"missed_high_ic"}
+    assert result.aggregate["wrong_granularity"] == 0.0
+    assert result.aggregate["spurious"] == 1.0
+    assert {f["type"] for f in result.details["flags"]} == {"missed_high_ic", "high_ic_spurious_fp"}
+
+
+def test_hallucinated_prediction_scores_as_error(ontology):
+    from clineval.tasks.hpo_extraction.adapters import align_records
+    from clineval.tasks.hpo_extraction.metrics import Tier1ExactMetric
+    rec = _rec("r1", ["HP:0001250"], ["HP:0001250", "HP:9999999"])  # 1 real + 1 hallucinated
+    records, alignment = align_records([rec], ontology)
+    assert "HP:9999999" in records[0].system_output      # kept, not dropped
+    assert alignment.unknown_flagged == 1
+    ctx = EvalContext(ontology=ontology)
+    assert Tier1ExactMetric().compute(records, ctx).per_document["r1"]["precision"] == 0.5
+    assert Tier3ClinicalMetric().compute(records, ctx).aggregate["spurious"] == 1.0
+
+
+def test_root_prediction_is_spurious_not_wrong_granularity(ontology):
+    rec = _rec("r1", ["HP:0001250"], ["HP:0000118"])  # root = ancestor of everything, Lin~0
+    agg = Tier3ClinicalMetric().compute([rec], EvalContext(ontology=ontology)).aggregate
+    assert agg["spurious"] == 1.0
+    assert agg["wrong_granularity"] == 0.0
