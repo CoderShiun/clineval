@@ -45,3 +45,10 @@ def test_bma_perfect_and_partial(ontology):
     assert ontology.bma(["HP:0001250"], ["HP:0001250"]) == 1.0
     partial = ontology.bma(["HP:0011682"], ["HP:0011623"])
     assert 0.0 < partial < 1.0
+
+
+def test_resolve_flags_obsolete_retained_term(ontology):
+    # HP:0000057 is obsolete but retained in the ontology (replaced_by HP:0008665).
+    res = ontology.resolve("HP:0000057")
+    assert res.status == "obsolete"
+    assert res.resolved is None

@@ -77,6 +77,12 @@ class Ontology:
 
     def resolve(self, hpo_id: str) -> TermResolution:
         term = self._lookup(hpo_id)
+        if term is not None and getattr(term, "is_obsolete", False):
+            # PyHPO 4.0.0 retains obsolete terms (often with a `replaced_by`
+            # pointer) instead of dropping them. Per the MVP alignment
+            # policy we flag these as obsolete rather than remapping via
+            # `replaced_by`.
+            return TermResolution(hpo_id, None, "obsolete")
         if term is not None and term.id == hpo_id:
             return TermResolution(hpo_id, hpo_id, "primary")
         if hpo_id in self._alt_index:
