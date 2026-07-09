@@ -36,6 +36,8 @@ def render_report(result: EvaluationResult) -> str:
     sem_f1 = tier2.aggregate.get("sem_f1", 0.0)
     obsolete_ids = result.alignment.obsolete_ids
     obsolete_suffix = f" ({', '.join(obsolete_ids)})" if obsolete_ids else ""
+    unknown_ids = result.alignment.unknown_ids
+    unknown_suffix = f" ({', '.join(unknown_ids)})" if unknown_ids else ""
     return template.render(
         r=result,
         tier1=tier1,
@@ -47,4 +49,5 @@ def render_report(result: EvaluationResult) -> str:
         rows=mapping.get_mapping_rows(),
         disclaimer=mapping.DISCLAIMER,
         obsolete_suffix=obsolete_suffix,
+        unknown_suffix=unknown_suffix,
     )

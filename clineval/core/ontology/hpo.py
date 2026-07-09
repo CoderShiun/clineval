@@ -23,7 +23,7 @@ class TermResolution:
 
     original: str
     resolved: str | None
-    status: str  # "primary" | "alt_id" | "obsolete"
+    status: str  # "primary" | "alt_id" | "obsolete" | "unknown"
 
 
 class Ontology:
@@ -105,7 +105,7 @@ class Ontology:
             return TermResolution(hpo_id, self._alt_index[hpo_id], "alt_id")
         if term is not None and term.id != hpo_id:
             return TermResolution(hpo_id, term.id, "alt_id")
-        return TermResolution(hpo_id, None, "obsolete")
+        return TermResolution(hpo_id, None, "unknown")
 
     def term(self, hpo_id: str):
         return self._lookup(hpo_id)

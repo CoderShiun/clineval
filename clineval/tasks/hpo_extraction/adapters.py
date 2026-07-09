@@ -66,9 +66,12 @@ def _align_list(ontology, ids: list[str], counters: dict) -> list[str]:
         elif res.status == "alt_id":
             counters["alt"] += 1
             resolved.append(res.resolved)
-        else:  # obsolete / unknown
+        elif res.status == "obsolete":
             counters["obsolete"] += 1
             counters["obsolete_ids"].append(hpo_id)
+        else:  # unknown
+            counters["unknown"] += 1
+            counters["unknown_ids"].append(hpo_id)
     seen: set[str] = set()
     deduped: list[str] = []
     for x in resolved:
@@ -80,7 +83,13 @@ def _align_list(ontology, ids: list[str], counters: dict) -> list[str]:
 
 def align_records(records: list[PredictionRecord], ontology) -> tuple[list[PredictionRecord], OntologyAlignment]:
     """Resolve alt_ids to primary and flag/drop obsolete IDs; summarize alignment."""
-    counters = {"alt": 0, "obsolete": 0, "obsolete_ids": []}
+    counters = {
+        "alt": 0,
+        "obsolete": 0,
+        "obsolete_ids": [],
+        "unknown": 0,
+        "unknown_ids": [],
+    }
     for rec in records:
         rec.gold_reference = _align_list(ontology, rec.gold_reference, counters)
         rec.system_output = _align_list(ontology, rec.system_output, counters)
@@ -91,8 +100,11 @@ def align_records(records: list[PredictionRecord], ontology) -> tuple[list[Predi
         obsolete_flagged=counters["obsolete"],
         obsolete_ids=sorted(set(counters["obsolete_ids"])),
         policy=(
-            "alt_id resolved to primary; merged/obsolete IDs flagged and excluded "
-            "from scoring (no replaced_by remap in the MVP)."
+            "alt_id resolved to primary; obsolete (deprecated) and unknown "
+            "(unrecognized) IDs flagged and excluded from scoring (no replaced_by "
+            "remap in the MVP)."
         ),
+        unknown_flagged=counters["unknown"],
+        unknown_ids=sorted(set(counters["unknown_ids"])),
     )
     return records, alignment

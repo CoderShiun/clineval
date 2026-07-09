@@ -18,9 +18,9 @@ def test_resolve_primary(ontology):
     assert res.resolved == "HP:0001629"
 
 
-def test_resolve_obsolete_or_unknown(ontology):
+def test_resolve_unknown_id(ontology):
     res = ontology.resolve("HP:0000000")  # not a real term
-    assert res.status == "obsolete"
+    assert res.status == "unknown"
     assert res.resolved is None
 
 

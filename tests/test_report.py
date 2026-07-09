@@ -26,7 +26,10 @@ def _result():
         details={"flags": [{"record": "r1", "type": "missed_high_ic",
                             "hpo_id": "HP:0011682", "ic": 5.1}]},
     )
-    align = OntologyAlignment("2025-01-01", "omim", 2, 1, ["HP:0000999"], "policy text")
+    align = OntologyAlignment(
+        "2025-01-01", "omim", 2, 1, ["HP:0000999"], "policy text",
+        unknown_flagged=2, unknown_ids=["HP:9999999"],
+    )
     return EvaluationResult(
         task="hpo_extraction", dataset="synthetic", n_documents=1, model="cached:qwen",
         timestamp="2026-07-09T00:00:00+00:00", metrics=[tier1, tier2, tier3],
@@ -49,4 +52,7 @@ def test_report_contains_key_sections():
     assert "missed_high_ic" in md
     assert "not legal" in md.lower()    # disclaimer
     assert "(HP:0000999)" in md                 # obsolete ids shown
+    assert "Unknown/unrecognized IDs:" in md
+    assert "(HP:9999999)" in md                 # unknown ids shown
+    assert "\n- **Unknown/unrecognized IDs:**" in md  # own line
     assert "\n- **Policy:**" in md              # Policy stays on its own line

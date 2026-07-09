@@ -37,6 +37,8 @@ class OntologyAlignment:
     obsolete_flagged: int
     obsolete_ids: list[str]
     policy: str
+    unknown_flagged: int = 0
+    unknown_ids: list[str] = field(default_factory=list)
 
 
 @dataclass
