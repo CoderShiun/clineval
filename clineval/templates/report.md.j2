@@ -1,0 +1,69 @@
+# ClinEval Report — {{ r.task }}
+
+- **Dataset:** {{ r.dataset }}
+- **Documents:** {{ r.n_documents }}
+- **Model:** {{ r.model }}
+- **HPO version:** {{ r.alignment.hpo_version }}
+- **IC basis:** {{ r.alignment.ic_basis }}
+- **Generated:** {{ r.timestamp }}
+
+## Overall scores
+
+| Metric | Precision | Recall | F1 |
+|---|---|---|---|
+| Tier 1 — exact | {{ '%.3f'|format(tier1.aggregate.precision) }} | {{ '%.3f'|format(tier1.aggregate.recall) }} | {{ '%.3f'|format(tier1.aggregate.f1) }} |
+| Tier 2 — semantic | {{ '%.3f'|format(tier2.aggregate.sem_precision) }} | {{ '%.3f'|format(tier2.aggregate.sem_recall) }} | {{ '%.3f'|format(tier2.aggregate.sem_f1) }} |
+| Tier 2 — semantic (IC-weighted) | {{ '%.3f'|format(tier2.aggregate.sem_precision_icw) }} | {{ '%.3f'|format(tier2.aggregate.sem_recall_icw) }} | {{ '%.3f'|format(tier2.aggregate.sem_f1_icw) }} |
+
+**Set-based BMA:** {{ '%.3f'|format(tier2.aggregate.bma) }}
+
+**Exact vs semantic F1 gap:** exact {{ '%.3f'|format(exact_f1) }} → semantic {{ '%.3f'|format(sem_f1) }} (**+{{ '%.3f'|format(gap) }}**). A positive gap means many "errors" are clinically near-misses (parent/child/sibling terms), not unrelated hallucinations.
+
+## Per-document breakdown
+
+| Doc | Exact P | Exact R | Exact F1 | Semantic F1 | BMA |
+|---|---|---|---|---|---|
+{% for rec in r.records -%}
+| {{ rec.id }} | {{ '%.3f'|format(tier1.per_document[rec.id].precision) }} | {{ '%.3f'|format(tier1.per_document[rec.id].recall) }} | {{ '%.3f'|format(tier1.per_document[rec.id].f1) }} | {{ '%.3f'|format(tier2.per_document[rec.id].sem_f1) }} | {{ '%.3f'|format(tier2.per_document[rec.id].bma) }} |
+{% endfor %}
+
+## Error taxonomy
+
+| Category | Count |
+|---|---|
+| Missed (FN) | {{ tier3.aggregate.missed|int }} |
+| Wrong granularity (parent/child) | {{ tier3.aggregate.wrong_granularity|int }} |
+| Wrong term (related, not parent/child) | {{ tier3.aggregate.wrong_term|int }} |
+| Spurious (unrelated FP) | {{ tier3.aggregate.spurious|int }} |
+
+## Clinical-significance flags
+
+{% if tier3.details.flags -%}
+| Record | Type | HPO ID | IC |
+|---|---|---|---|
+{% for f in tier3.details.flags -%}
+| {{ f.record }} | {{ f.type }} | {{ f.hpo_id }} | {{ '%.3f'|format(f.ic) }} |
+{% endfor -%}
+{% else -%}
+None.
+{% endif %}
+
+## Ontology Alignment
+
+- **HPO version:** {{ r.alignment.hpo_version }}
+- **IC basis:** {{ r.alignment.ic_basis }}
+- **alt_ids resolved:** {{ r.alignment.alt_ids_resolved }}
+- **Merged/obsolete flagged:** {{ r.alignment.obsolete_flagged }}{% if r.alignment.obsolete_ids %} ({{ r.alignment.obsolete_ids|join(', ') }}){% endif %}
+- **Policy:** {{ r.alignment.policy }}
+
+## Regulatory Evidence Mapping
+
+| ClinEval evidence | EU AI Act | IVDR | ISO 15189:2022 |
+|---|---|---|---|
+{% for row in rows -%}
+| {{ row.evidence }} | {{ row.ai_act }} | {{ row.ivdr }} | {{ row.iso15189 }} |
+{% endfor %}
+
+---
+
+*{{ disclaimer }}*
