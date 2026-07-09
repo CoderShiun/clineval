@@ -32,14 +32,21 @@ class CachedExtractor:
                     continue
                 try:
                     obj = json.loads(line)
-                    if obj.get("_meta"):
-                        self.model = obj.get("model", "unknown")
-                        continue
-                    self._by_id[str(obj["id"])] = adapters.normalize_hpo_ids(
-                        obj.get("system_output", [])
-                    )
-                except (json.JSONDecodeError, KeyError) as exc:
+                except json.JSONDecodeError as exc:
                     raise ValueError(f"malformed cache line {n} in {path}: {exc}") from exc
+                if obj.get("_meta"):
+                    self.model = obj.get("model", "unknown")
+                    continue
+                if "id" not in obj:
+                    raise ValueError(f"malformed cache line {n} in {path}: missing required field 'id'")
+                if "system_output" in obj and not isinstance(obj["system_output"], list):
+                    raise ValueError(
+                        f"malformed cache line {n} in {path}: field 'system_output' "
+                        f"must be a list, got {type(obj['system_output']).__name__}"
+                    )
+                self._by_id[str(obj["id"])] = adapters.normalize_hpo_ids(
+                    obj.get("system_output", [])
+                )
 
     def extract(self, record: PredictionRecord) -> list[str]:
         return list(self._by_id.get(record.id, []))

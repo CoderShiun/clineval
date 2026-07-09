@@ -6,6 +6,7 @@ from clineval.tasks.hpo_extraction.adapters import _align_list, align_records
 class FakeOntology:
     version = "test-1.0"
     ic_basis = "omim"
+    library_version = "9.9.9"
 
     def resolve(self, hpo_id):
         table = {
@@ -36,6 +37,7 @@ def test_align_resolves_alt_and_flags_obsolete():
     assert alignment.unknown_ids == []
     assert alignment.hpo_version == "test-1.0"
     assert alignment.ic_basis == "omim"
+    assert alignment.pyhpo_version == "9.9.9"
 
 
 def test_align_counts_obsolete_and_unknown_separately():

@@ -39,6 +39,7 @@ class OntologyAlignment:
     policy: str
     unknown_flagged: int = 0
     unknown_ids: list[str] = field(default_factory=list)
+    pyhpo_version: str = ""
 
 
 @dataclass

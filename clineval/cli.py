@@ -24,6 +24,11 @@ from clineval.tasks.hpo_extraction.extractor import (
 
 app = typer.Typer(add_completion=False, help="ClinEval: evaluate clinical LLM outputs.")
 
+# Only bounded, self-similarity=1.0 methods are safe as a semantic-scoring knob.
+# Resnik and friends are unnormalized IC and would make semantic F1 fall BELOW
+# exact F1, which is nonsensical for a "semantic near-miss credit" score.
+_ALLOWED_SIMILARITY_METHODS = {"lin", "jc", "jaccard"}
+
 
 @app.callback()
 def main() -> None:
@@ -55,8 +60,20 @@ def run(
     base_url: str = typer.Option("http://localhost:1234/v1", help="OpenAI-compatible URL."),
     model: str = typer.Option("local-model", help="Model name for --live."),
     api_key: str = typer.Option("not-needed", help="API key for --live."),
+    relatedness_tau: float = typer.Option(
+        0.3, help="Tier 3: Lin-similarity threshold for 'related' classification."
+    ),
+    ic_high_threshold: float = typer.Option(
+        3.0, help="Tier 3: IC threshold for clinical-significance flags."
+    ),
+    similarity_method: str = typer.Option(
+        "lin", help="Semantic similarity method (lin, jc, or jaccard)."
+    ),
 ) -> None:
     """Run an end-to-end evaluation and write a Markdown report."""
+    if similarity_method not in _ALLOWED_SIMILARITY_METHODS:
+        typer.echo("Error: --similarity-method must be one of: lin, jc, jaccard", err=True)
+        raise typer.Exit(code=1)
     try:
         records = _load_dataset(dataset)
         for rec in records:
@@ -84,16 +101,29 @@ def run(
     hits: int | None = None
     if not live:
         hits = sum(1 for rec in records if extractor.covers(rec.id))
+        model_label = f"cached:{extractor.model} [{hits}/{len(records)} cache hits]"
         if hits == 0:
             typer.echo(
                 f"WARNING: 0/{len(records)} records matched cache '{cache}' — the "
                 "report will be all-zero. Check --dataset/--cache alignment or use --live.",
                 err=True,
             )
+        elif hits < len(records):
+            typer.echo(
+                f"WARNING: only {hits}/{len(records)} records matched cache '{cache}' — "
+                "the report will contain all-zero scores for the unmatched records. "
+                "Check --dataset/--cache alignment or use --live.",
+                err=True,
+            )
 
     ontology = Ontology()
     records, alignment = adapters.align_records(records, ontology)
-    context = EvalContext(ontology=ontology, config={})
+    config = {
+        "relatedness_tau": relatedness_tau,
+        "ic_high_threshold": ic_high_threshold,
+        "similarity_method": similarity_method,
+    }
+    context = EvalContext(ontology=ontology, config=config)
 
     result = evaluate(
         task,

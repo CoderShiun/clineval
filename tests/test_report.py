@@ -30,7 +30,7 @@ def _result():
     )
     align = OntologyAlignment(
         "2025-01-01", "omim", 2, 1, ["HP:0000999"], "policy text",
-        unknown_flagged=2, unknown_ids=["HP:9999999"],
+        unknown_flagged=2, unknown_ids=["HP:9999999"], pyhpo_version="3.2.1",
     )
     return EvaluationResult(
         task="hpo_extraction", dataset="synthetic", n_documents=1, model="cached:qwen",
@@ -58,6 +58,8 @@ def test_report_contains_key_sections():
     assert "(HP:9999999)" in md                 # unknown ids shown
     assert "\n- **Unknown/unrecognized IDs:**" in md  # own line
     assert "\n- **Policy:**" in md              # Policy stays on its own line
+    assert "pyhpo version" in md.lower()        # library provenance recorded
+    assert "3.2.1" in md
 
 
 def test_report_ends_with_trailing_newline():

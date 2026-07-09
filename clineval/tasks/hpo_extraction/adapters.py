@@ -121,5 +121,6 @@ def align_records(records: list[PredictionRecord], ontology) -> tuple[list[Predi
         ),
         unknown_flagged=len(unknown_ids_unique),
         unknown_ids=unknown_ids_unique,
+        pyhpo_version=ontology.library_version,
     )
     return records, alignment

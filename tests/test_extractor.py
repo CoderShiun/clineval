@@ -29,6 +29,28 @@ def test_cached_extractor_rejects_malformed_cache_line(tmp_path):
         CachedExtractor(str(cache))
 
 
+def test_cached_extractor_rejects_invalid_json_line(tmp_path):
+    cache = tmp_path / "cache.jsonl"
+    cache.write_text(
+        '{"_meta": true, "model": "qwen-test"}\n'
+        "not json\n",
+        encoding="utf-8",
+    )
+    with pytest.raises(ValueError, match="malformed cache line 2"):
+        CachedExtractor(str(cache))
+
+
+def test_cached_extractor_rejects_non_list_system_output(tmp_path):
+    cache = tmp_path / "cache.jsonl"
+    cache.write_text(
+        '{"_meta": true, "model": "qwen-test"}\n'
+        '{"id": "r1", "system_output": "HP:0001250"}\n',  # not a list
+        encoding="utf-8",
+    )
+    with pytest.raises(ValueError, match="malformed cache"):
+        CachedExtractor(str(cache))
+
+
 def test_cached_extractor_skips_blank_lines(tmp_path):
     cache = tmp_path / "cache.jsonl"
     cache.write_text(

@@ -57,6 +57,7 @@ class _ConvergingOntology:
 
     version = "test-1.0"
     ic_basis = "omim"
+    library_version = "9.9.9"
 
     def resolve(self, hpo_id):
         table = {

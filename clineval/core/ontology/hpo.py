@@ -6,6 +6,7 @@ on PyHPO directly, so any PyHPO API change is isolated here.
 
 from __future__ import annotations
 
+import importlib.metadata
 from dataclasses import dataclass
 
 from clineval.core.ontology.ic import term_ic
@@ -66,6 +67,13 @@ class Ontology:
             except Exception:
                 return "unknown"
         return str(raw) if raw else "unknown"
+
+    @property
+    def library_version(self) -> str:
+        # The pyhpo release bundles a specific OMIM annotation snapshot that
+        # drives every IC value: the same HPO obo data-version under a
+        # different pyhpo release can still yield different scores.
+        return importlib.metadata.version("pyhpo")
 
     def _build_alt_index(self) -> dict[str, str]:
         index: dict[str, str] = {}

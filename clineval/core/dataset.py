@@ -37,20 +37,37 @@ class JSONLDatasetLoader(DatasetLoader):
                     obj = json.loads(line)
                 except json.JSONDecodeError as exc:
                     raise ValueError(f"{self.path} line {n}: invalid JSON ({exc})") from exc
-                try:
-                    record = PredictionRecord(
-                        id=str(obj["id"]),
-                        input_text=obj.get("input_text", ""),
-                        gold_reference=list(obj["gold_reference"]),
-                        system_output=list(obj.get("system_output", [])),
-                        metadata=dict(obj.get("metadata", {})),
+                if "id" not in obj:
+                    raise ValueError(f"{self.path} line {n}: missing required field 'id'")
+                if "gold_reference" not in obj:
+                    raise ValueError(
+                        f"{self.path} line {n}: record {obj.get('id', '?')!r} is "
+                        "missing required field 'gold_reference'"
                     )
-                except KeyError as exc:
-                    if exc.args and exc.args[0] == "gold_reference":
-                        raise ValueError(
-                            f"{self.path} line {n}: record {obj.get('id', '?')!r} is "
-                            "missing required field 'gold_reference'"
-                        ) from exc
-                    raise
+                if not isinstance(obj["gold_reference"], list):
+                    raise ValueError(
+                        f"{self.path} line {n}: record {obj.get('id', '?')!r} field "
+                        "'gold_reference' must be a list, got "
+                        f"{type(obj['gold_reference']).__name__}"
+                    )
+                if "system_output" in obj and not isinstance(obj["system_output"], list):
+                    raise ValueError(
+                        f"{self.path} line {n}: record {obj.get('id', '?')!r} field "
+                        "'system_output' must be a list, got "
+                        f"{type(obj['system_output']).__name__}"
+                    )
+                if "metadata" in obj and not isinstance(obj["metadata"], dict):
+                    raise ValueError(
+                        f"{self.path} line {n}: record {obj.get('id', '?')!r} field "
+                        "'metadata' must be an object, got "
+                        f"{type(obj['metadata']).__name__}"
+                    )
+                record = PredictionRecord(
+                    id=str(obj["id"]),
+                    input_text=obj.get("input_text", ""),
+                    gold_reference=list(obj["gold_reference"]),
+                    system_output=list(obj.get("system_output", [])),
+                    metadata=dict(obj.get("metadata", {})),
+                )
                 records.append(record)
         return records
