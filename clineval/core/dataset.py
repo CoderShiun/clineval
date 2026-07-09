@@ -38,7 +38,7 @@ class JSONLDatasetLoader(DatasetLoader):
                     PredictionRecord(
                         id=str(obj["id"]),
                         input_text=obj.get("input_text", ""),
-                        gold_reference=list(obj.get("gold_reference", [])),
+                        gold_reference=list(obj["gold_reference"]),
                         system_output=list(obj.get("system_output", [])),
                         metadata=dict(obj.get("metadata", {})),
                     )
