@@ -85,7 +85,9 @@ For a step-by-step, inspectable walkthrough of the same pipeline, see
 [`examples/hpo_extraction_demo.ipynb`](examples/hpo_extraction_demo.ipynb).
 
 Tunable scoring knobs are exposed as flags: `--relatedness-tau`, `--ic-high-threshold`,
-and `--similarity-method` (`lin`, `jc`, or `jaccard`).
+and `--similarity-method` (`lin`, `jc`, or `jaccard`). The `--relatedness-tau` default
+(0.3) is calibrated for `lin`; re-tune it if you switch similarity method, since the
+similarity scales differ.
 
 ## Development
 

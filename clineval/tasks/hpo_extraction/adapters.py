@@ -69,12 +69,10 @@ def _align_list(
             counters["alt"] += 1
             resolved.append(res.resolved)
         elif res.status == "obsolete":
-            counters["obsolete"] += 1
             counters["obsolete_ids"].append(hpo_id)
             if keep_unresolvable:
                 resolved.append(hpo_id)
         else:  # unknown
-            counters["unknown"] += 1
             counters["unknown_ids"].append(hpo_id)
             if keep_unresolvable:
                 resolved.append(hpo_id)
@@ -91,9 +89,7 @@ def align_records(records: list[PredictionRecord], ontology) -> tuple[list[Predi
     """Resolve alt_ids to primary and flag/drop obsolete IDs; summarize alignment."""
     counters = {
         "alt": 0,
-        "obsolete": 0,
         "obsolete_ids": [],
-        "unknown": 0,
         "unknown_ids": [],
     }
     for rec in records:

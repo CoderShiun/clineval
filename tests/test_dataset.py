@@ -77,3 +77,11 @@ def test_jsonl_loader_rejects_non_object_metadata(tmp_path):
     )
     with pytest.raises(ValueError, match="line 1.*metadata.*object"):
         JSONLDatasetLoader(str(p)).load()
+
+
+def test_jsonl_loader_rejects_non_object_line(tmp_path):
+    # A whole-line bare scalar/array must fail cleanly, not raise a raw TypeError.
+    p = tmp_path / "bad.jsonl"
+    p.write_text("42\n", encoding="utf-8")
+    with pytest.raises(ValueError, match="line 1.*must be a JSON object"):
+        JSONLDatasetLoader(str(p)).load()

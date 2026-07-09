@@ -37,6 +37,8 @@ class JSONLDatasetLoader(DatasetLoader):
                     obj = json.loads(line)
                 except json.JSONDecodeError as exc:
                     raise ValueError(f"{self.path} line {n}: invalid JSON ({exc})") from exc
+                if not isinstance(obj, dict):
+                    raise ValueError(f"{self.path} line {n}: each line must be a JSON object")
                 if "id" not in obj:
                     raise ValueError(f"{self.path} line {n}: missing required field 'id'")
                 if "gold_reference" not in obj:

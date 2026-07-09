@@ -51,6 +51,18 @@ def test_cached_extractor_rejects_non_list_system_output(tmp_path):
         CachedExtractor(str(cache))
 
 
+def test_cached_extractor_rejects_non_object_line(tmp_path):
+    # A whole-line bare array/scalar must fail cleanly, not raise a raw AttributeError.
+    cache = tmp_path / "cache.jsonl"
+    cache.write_text(
+        '{"_meta": true, "model": "qwen-test"}\n'
+        "[1, 2, 3]\n",
+        encoding="utf-8",
+    )
+    with pytest.raises(ValueError, match="not a JSON object"):
+        CachedExtractor(str(cache))
+
+
 def test_cached_extractor_skips_blank_lines(tmp_path):
     cache = tmp_path / "cache.jsonl"
     cache.write_text(

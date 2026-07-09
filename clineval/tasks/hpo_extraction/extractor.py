@@ -34,6 +34,8 @@ class CachedExtractor:
                     obj = json.loads(line)
                 except json.JSONDecodeError as exc:
                     raise ValueError(f"malformed cache line {n} in {path}: {exc}") from exc
+                if not isinstance(obj, dict):
+                    raise ValueError(f"malformed cache line {n} in {path}: not a JSON object")
                 if obj.get("_meta"):
                     self.model = obj.get("model", "unknown")
                     continue
