@@ -84,6 +84,22 @@ docker compose run --rm clineval uv run clineval run \
 For a step-by-step, inspectable walkthrough of the same pipeline, see
 [`examples/hpo_extraction_demo.ipynb`](examples/hpo_extraction_demo.ipynb).
 
+Tunable scoring knobs are exposed as flags: `--relatedness-tau`, `--ic-high-threshold`,
+and `--similarity-method` (`lin`, `jc`, or `jaccard`).
+
+## Development
+
+All development runs in the container — no host Python/uv install.
+
+```bash
+docker compose build
+docker compose run --rm clineval uv run pytest        # test suite + coverage gate
+docker compose run --rm clineval uv run ruff check .  # lint
+```
+
+The suite runs fully offline and deterministically (no live LLM, no network); coverage is
+enforced at build-time via `--cov-fail-under` in `pyproject.toml`.
+
 ## Architecture
 
 ClinEval separates a **generic evaluation core** from **pluggable tasks**:

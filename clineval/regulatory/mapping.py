@@ -28,13 +28,13 @@ REGULATORY_ROWS: list[dict[str, str]] = [
         "evidence": "Error taxonomy + significance flags",
         "ai_act": "Art 15 (robustness)",
         "ivdr": "performance / risk evidence",
-        "iso15189": "7.3.7 ensuring validity of results + 7.5 nonconforming work",
+        "iso15189": "7.3.7 ensuring validity of results + 7.5 nonconforming work (clinical significance)",
     },
     {
         "evidence": "Ontology alignment / traceability",
         "ai_act": "Art 12 (logging & traceability)",
         "ivdr": "technical documentation",
-        "iso15189": "Clause 8 management system (records & documents)",
+        "iso15189": "Clause 8 management system (control of records & documents)",
     },
 ]
 

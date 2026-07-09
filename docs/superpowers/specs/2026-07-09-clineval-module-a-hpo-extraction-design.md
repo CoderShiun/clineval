@@ -115,14 +115,17 @@ GSC+ writes HPO IDs with underscores (`HP_0000110`); PyHPO uses colons (`HP:0000
 
 The pipeline-level pass is the hard prerequisite for Tier 1 exact matching to work at all; the loader-level pass on `GscPlusLoader` is defense-in-depth, not the sole guarantee.
 
-### 3.2 Version alignment (applied at load, to both gold and predictions)
+### 3.2 Version alignment (applied at load)
 
-1. **Resolve** secondary IDs `alt_id → primary` (lossless; the same term; logged). PyHPO can look these up.
-2. **Merged/obsolete** IDs with no clean alt_id match: **detect, count, and report — do NOT auto-remap** via `replaced_by` in the MVP. Flagged IDs are excluded from scoring, with counts surfaced in the report.
-3. **Record** for the report's Ontology Alignment section: HPO version used, IC frequency basis, # alt_ids resolved, # merged/obsolete flagged, and the handling policy.
-4. **Pin/record** the exact HPO release PyHPO uses, so results are reproducible.
+1. **Resolve** secondary IDs `alt_id → primary` (lossless; the same term; logged), for both gold and predictions. PyHPO can look these up.
+2. **Obsolete vs unknown:** an ID that is not a current primary term is classified as **obsolete** (a real but deprecated term, still retained in the ontology with `is_obsolete`) or **unknown** (an ID absent from the ontology entirely — a hallucinated / typo'd / never-existed ID). Neither is auto-remapped via `replaced_by` in the MVP; both are counted and reported.
+3. **Asymmetric handling (gold vs predictions) — this matters:**
+   - In **gold**, obsolete/unknown IDs are flagged and **excluded from scoring** (you cannot score against an unplaceable gold term).
+   - In **predictions**, obsolete/unknown IDs are **retained so they score as errors** (a precision penalty / `spurious` FP) — a validation rig must penalise a system that emits a deprecated or hallucinated ID, not silently drop it. (The ontology returns similarity 0 / IC 0 for an unknown ID, so it earns no semantic credit and is classified `spurious`.)
+4. **Record** for the report's Ontology Alignment section: HPO release, pyhpo library version, IC frequency basis, # alt_ids resolved, # obsolete flagged, # unknown flagged, and the handling policy.
+5. **Pin/record** the exact HPO release and the pyhpo library version (which bundles the annotation snapshot driving IC), so results are reproducible.
 
-*Rationale:* `replaced_by` remapping has ambiguous cases (one-to-many, no successor, multiple `consider` candidates) that need judgement; auto-remapping now risks silently altering gold before the core is validated. Full `replaced_by` remapping is a good post-MVP enhancement.
+*Rationale:* `replaced_by` remapping has ambiguous cases (one-to-many, no successor, multiple `consider` candidates) that need judgement; auto-remapping now risks silently altering gold before the core is validated (post-MVP enhancement). Splitting **unknown** from **obsolete** keeps the traceability record honest, and **retaining unresolvable predictions** prevents the tool from silently flattering a hallucinating system.
 
 ---
 
@@ -197,7 +200,7 @@ Jinja2 → Markdown (HTML deferred). Sections:
 3. **Per-document breakdown** table.
 4. **Error-taxonomy** counts + examples (missed / spurious / wrong-granularity / wrong-term).
 5. **Clinical-significance flags.**
-6. **Ontology Alignment** — HPO version, IC frequency basis, # alt_ids resolved, # merged/obsolete flagged, handling policy.
+6. **Ontology Alignment** — HPO release, pyhpo library version, IC frequency basis, # alt_ids resolved, # obsolete flagged, # unknown flagged, handling policy. (Cache hit-rate is surfaced in the run-metadata Model line for cached runs.)
 7. **Regulatory Evidence Mapping** — the table in §8.
 8. **Disclaimer** — not legal/regulatory advice.
 
