@@ -12,7 +12,7 @@ def test_wrong_granularity_when_parent_predicted(ontology):
     rec = _rec("r1", ["HP:0011682"], ["HP:0001629"])
     result = Tier3ClinicalMetric().compute([rec], EvalContext(ontology=ontology))
     assert result.aggregate["wrong_granularity"] == 1.0
-    assert result.aggregate["missed"] == 1.0  # gold not exactly present
+    assert result.aggregate["missed"] == 0.0  # gold child was near-captured by the predicted parent
 
 
 def test_spurious_unrelated_fp(ontology):
@@ -42,3 +42,16 @@ def test_missed_high_ic_flag(ontology):
     )
     types = {f["type"] for f in result.details["flags"]}
     assert "missed_high_ic" in types
+
+
+def test_high_ic_spurious_fp_flag_and_zero_categories(ontology):
+    # Unrelated FP (seizure) against VSD gold; ic_high=0.0 makes any spurious FP flag.
+    rec = _rec("r1", ["HP:0001629"], ["HP:0001250"])
+    result = Tier3ClinicalMetric().compute(
+        [rec], EvalContext(ontology=ontology, config={"ic_high_threshold": 0.0})
+    )
+    types = {f["type"] for f in result.details["flags"]}
+    assert "high_ic_spurious_fp" in types
+    assert result.aggregate["spurious"] == 1.0
+    assert result.aggregate["wrong_granularity"] == 0.0
+    assert result.aggregate["wrong_term"] == 0.0

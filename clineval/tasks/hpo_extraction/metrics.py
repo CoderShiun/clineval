@@ -157,6 +157,17 @@ class Tier3ClinicalMetric(Metric):
                 totals[category] += 1
 
             for g in residual_gold:
+                # A gold term is "missed" only if no prediction approximately
+                # captured it (no ancestor/descendant and no related term above
+                # tau). A near counterpart is already scored on the prediction
+                # side as wrong_granularity / wrong_term, so counting it here too
+                # would double-count and wrongly raise a missed-high-IC alarm.
+                near = any(
+                    onto.related(p, g) or onto.similarity(p, g, method=method) >= tau
+                    for p in residual_pred
+                )
+                if near:
+                    continue
                 doc["missed"] += 1
                 totals["missed"] += 1
                 ic_g = onto.ic(g)

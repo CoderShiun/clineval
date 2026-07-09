@@ -97,14 +97,17 @@ clineval/tasks/
     report_generation/  Module B seam — intentionally empty. A future task adds
                          faithfulness/hallucination metrics for generated clinical
                          reports here, reusing the same core schema, evaluator, and
-                         report machinery, without touching Module A.
+                         metric registry, without touching Module A.
 clineval/regulatory/    the evidence-to-clause mapping table
 clineval/templates/     the Jinja2 report template
 ```
 
 Adding a new task means implementing a `DatasetLoader`, one or more `Metric`s registered
-under a task name, and (optionally) an extractor — the core evaluator, alignment, and
-report renderer are all reused unmodified.
+under a task name, and (optionally) an extractor — the core schema, evaluator, and
+task-keyed metric registry are the reusable, task-agnostic seam. The report layer is
+shared infrastructure (`core/report.py` + Jinja2), but each task configures it with its
+own template and metric set — Module A's renderer looks up `tier1`/`tier2`/`tier3` by
+name and isn't automatically task-agnostic just because it lives under `core/`.
 
 ## Datasets
 
@@ -113,9 +116,10 @@ report renderer are all reused unmodified.
   near-misses, unrelated errors, and an empty-gold case. This is what `--dataset synthetic`
   (the default) runs, entirely offline.
 - **GSC+ / BiolarkGSC+** — 228 PubMed abstracts annotated with HPO concepts (Lobo et al.,
-  2017). Not committed to this repo. Fetch and convert it with
-  `datasets/download_gsc.py` (`--dataset gsc`); see [`datasets/README.md`](datasets/README.md)
-  for the license-confirmation step required before use.
+  2017). Not committed to this repo. Fetch it with `datasets/download_gsc.py`, then
+  evaluate with `clineval run --dataset gsc`; see
+  [`datasets/README.md`](datasets/README.md) for the license-confirmation step required
+  before use.
 
 No patient data — real or synthetic PHI — is bundled or required. See below.
 

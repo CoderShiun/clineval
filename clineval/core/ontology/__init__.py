@@ -1,1 +1,1 @@
-"""Task-agnostic evaluation core."""
+"""HPO ontology access: loading, Information Content, semantic similarity."""

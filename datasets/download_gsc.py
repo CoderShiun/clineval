@@ -58,6 +58,15 @@ def convert(raw_dir: str, out_path: str) -> int:
             }
             fh.write(json.dumps(record, ensure_ascii=False) + "\n")
             count += 1
+
+    total_ann = sum(len(v) for v in gold.values())
+    if count and total_ann == 0:
+        raise ValueError(
+            "download_gsc.convert: parsed 0 HPO annotations from "
+            f"{raw_dir!r} though .txt docs were found — the annotation format/path "
+            "likely does not match the assumed 'annotations.tsv' layout; see the "
+            "module docstring."
+        )
     return count
 
 
@@ -73,7 +82,8 @@ def download(dest: str = DEFAULT_DEST) -> None:
     dest_dir = Path(dest)
     dest_dir.mkdir(parents=True, exist_ok=True)
     print(f"Downloading GSC+ from {GSC_PLUS_URL} ...")
-    with urllib.request.urlopen(GSC_PLUS_URL) as resp:  # noqa: S310 (reviewed URL)
+    # URL must be verified before use — see module docstring.
+    with urllib.request.urlopen(GSC_PLUS_URL) as resp:  # noqa: S310
         data = resp.read()
     with zipfile.ZipFile(io.BytesIO(data)) as zf:
         zf.extractall(dest_dir / "raw")

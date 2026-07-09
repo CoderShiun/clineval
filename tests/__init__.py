@@ -1,1 +1,1 @@
-"""Task-agnostic evaluation core."""
+"""ClinEval test suite."""

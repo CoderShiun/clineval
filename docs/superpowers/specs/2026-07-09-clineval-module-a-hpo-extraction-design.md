@@ -92,7 +92,7 @@ clineval/
 - Module A: `system_output` and `gold_reference` are lists of HPO IDs.
 - Module B (future): `system_output` = generated report text; `gold_reference` = reference report + source facts.
 
-The **metric registry dispatches by task name**, so adding Module B = a new task folder + registered metrics, **without touching Module A**. This registry + shared schema is exactly what keeps future tasks additive.
+The **metric registry dispatches by task name**, so adding Module B = a new task folder + registered metrics, **without touching Module A**. This registry + shared schema is exactly what keeps future tasks additive. The report layer (`core/report.py` + `templates/`) is shared infrastructure, not an unmodified-reuse seam: each task configures it with its own template and metric set — Module A's `render_report()` looks up `tier1_exact`/`tier2_semantic`/`tier3_clinical` by name and renders a single HPO-specific template, so Module B will need its own template + its own lookups, not a drop-in reuse.
 
 **Data flow:**
 `DatasetLoader → records → Extractor fills system_output → Evaluator runs the task's registered metrics (with an EvalContext holding the loaded ontology + config) → EvaluationResult → Report renderer (Jinja2) → Markdown`.
@@ -154,6 +154,9 @@ Precision, Recall, and `F1 = 2·P·R / (P + R)` on HPO concept IDs, via set oper
   - **wrong-term** — a predicted term that is related but not parent-child (shares informative ancestry / Lin ≥ τ) — "in the neighborhood but wrong".
   - **spurious** — an unrelated predicted term (~no shared informative ancestor; hallucination) (FP).
   - `τ` (relatedness threshold) is configurable with a documented default.
+  - Unlike Tiers 1–2, these four counts are **corpus-level totals** (summed across all
+    documents), not macro-averaged per document — the §4 opening line above describes
+    Tiers 1–2; Tier 3's taxonomy is a count, not a rate.
 - **Clinical-significance flags:**
   - missed **high-IC** gold term (rare/specific phenotype missed).
   - high-IC **spurious** FP (could change variant prioritization).

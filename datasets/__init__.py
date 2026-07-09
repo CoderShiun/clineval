@@ -1,1 +1,1 @@
-"""Task-agnostic evaluation core."""
+"""Dataset download and conversion scripts (data itself is git-ignored)."""

@@ -1,1 +1,1 @@
-"""Task-agnostic evaluation core."""
+"""Mapping from ClinEval evidence to medical-device regulation clauses."""
