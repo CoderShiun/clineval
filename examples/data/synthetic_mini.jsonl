@@ -1,0 +1,10 @@
+{"id": "syn01", "input_text": "The patient presents with a perimembranous ventricular septal defect and mild short stature.", "gold_reference": ["HP:0011682", "HP:0004322"]}
+{"id": "syn02", "input_text": "Examination revealed recurrent seizures and microcephaly.", "gold_reference": ["HP:0001250", "HP:0000252"]}
+{"id": "syn03", "input_text": "Bilateral hearing impairment noted; intellectual disability present.", "gold_reference": ["HP:0000365", "HP:0001249"]}
+{"id": "syn04", "input_text": "Findings include an atrial septal defect and strabismus.", "gold_reference": ["HP:0001631", "HP:0000486"]}
+{"id": "syn05", "input_text": "The child has an abnormal facial shape and renal hypoplasia.", "gold_reference": ["HP:0001999", "HP:0000110"]}
+{"id": "syn06", "input_text": "A muscular ventricular septal defect was identified on echocardiography.", "gold_reference": ["HP:0011623"]}
+{"id": "syn07", "input_text": "Notable for global developmental delay and hypotonia.", "gold_reference": ["HP:0001263", "HP:0001252"]}
+{"id": "syn08", "input_text": "Patient with cleft palate and low-set ears.", "gold_reference": ["HP:0000175", "HP:0000369"]}
+{"id": "syn09", "input_text": "Presented with tall stature and arachnodactyly.", "gold_reference": ["HP:0000098", "HP:0001166"]}
+{"id": "syn10", "input_text": "No abnormal phenotype was detected on examination.", "gold_reference": []}
