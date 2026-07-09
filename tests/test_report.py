@@ -1,3 +1,5 @@
+import pytest
+
 from clineval.core.report import render_report
 from clineval.core.schema import (
     EvaluationResult,
@@ -56,3 +58,23 @@ def test_report_contains_key_sections():
     assert "(HP:9999999)" in md                 # unknown ids shown
     assert "\n- **Unknown/unrecognized IDs:**" in md  # own line
     assert "\n- **Policy:**" in md              # Policy stays on its own line
+
+
+def test_report_ends_with_trailing_newline():
+    md = render_report(_result())
+    assert md.endswith("\n")
+
+
+def test_report_renders_none_when_no_flags():
+    result = _result()
+    tier3 = result.metric("tier3_clinical")
+    tier3.details = {"flags": []}
+    md = render_report(result)
+    assert "## Clinical-significance flags\n\nNone.\n" in md
+
+
+def test_metric_raises_when_required_metric_missing():
+    result = _result()
+    result.metrics = [m for m in result.metrics if m.name != "tier2_semantic"]
+    with pytest.raises(ValueError, match="tier2_semantic"):
+        render_report(result)

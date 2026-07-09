@@ -1,3 +1,4 @@
+import openai
 from typer.testing import CliRunner
 
 import clineval.cli
@@ -5,6 +6,42 @@ from clineval.cli import app
 from clineval.core.schema import PredictionRecord
 
 runner = CliRunner()
+
+
+def test_cli_run_default_synthetic_dataset_shows_cache_hit_rate(tmp_path):
+    # No --dataset/--cache given: exercises the "synthetic" branch of
+    # _load_dataset and the default cached_predictions.jsonl, and the
+    # success-path "cache hits: N/M" summary line (hits > 0).
+    out = tmp_path / "report.md"
+    result = runner.invoke(app, ["run", "--report", str(out)])
+    assert result.exit_code == 0, result.output
+    assert "cache hits:" in result.output
+    hits_part = result.output.split("cache hits:")[1].strip().split("/")[0].strip()
+    assert int(hits_part) > 0
+    assert out.read_text(encoding="utf-8").startswith("# ClinEval Report")
+
+
+def test_cli_run_live_openai_error_is_friendly(tmp_path, monkeypatch):
+    data = tmp_path / "mini.jsonl"
+    data.write_text(
+        '{"id": "r1", "input_text": "seizures", "gold_reference": ["HP:0001250"]}\n',
+        encoding="utf-8",
+    )
+    out = tmp_path / "report.md"
+
+    class BoomExtractor:
+        def __init__(self, base_url, model, api_key):
+            raise openai.OpenAIError("connection refused")
+
+    monkeypatch.setattr(clineval.cli, "OpenAICompatibleExtractor", BoomExtractor)
+    result = runner.invoke(
+        app,
+        ["run", "--dataset", str(data), "--report", str(out), "--live"],
+    )
+    assert result.exit_code == 1
+    assert "Error" in result.output
+    assert "could not reach the LLM endpoint" in result.output
+    assert "host.docker.internal" in result.output
 
 
 def test_cli_run_writes_report(tmp_path):

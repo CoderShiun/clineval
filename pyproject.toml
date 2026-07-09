@@ -30,7 +30,7 @@ packages = ["clineval"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
-addopts = "-q"
+addopts = "-q --cov=clineval --cov-report=term-missing --cov-fail-under=98"
 filterwarnings = [
     "ignore:Support for class-based `config` is deprecated.*:DeprecationWarning:pyhpo.*",
 ]
@@ -38,3 +38,16 @@ filterwarnings = [
 [tool.ruff]
 line-length = 100
 target-version = "py314"
+
+[dependency-groups]
+dev = [
+    "pytest-cov>=7.1.0",
+]
+
+[tool.coverage.run]
+source = ["clineval"]
+branch = true
+
+[tool.coverage.report]
+show_missing = true
+exclude_lines = ["pragma: no cover", "if TYPE_CHECKING:", "raise NotImplementedError"]

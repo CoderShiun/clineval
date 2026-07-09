@@ -27,3 +27,4 @@ def test_evaluation_result_holds_components():
     )
     assert res.metrics[0].aggregate["f1"] == 0.5
     assert res.alignment.ic_basis == "omim"
+    assert res.metric("no_such_metric") is None

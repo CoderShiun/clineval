@@ -1,3 +1,4 @@
+from clineval.core.ontology.hpo import TermResolution
 from clineval.core.schema import PredictionRecord
 from clineval.tasks.hpo_extraction import adapters
 
@@ -23,6 +24,16 @@ def test_parse_llm_output_extracts_ids():
     assert adapters.parse_llm_output(text) == ["HP:0001250", "HP:0000252"]
 
 
+def test_parse_llm_output_empty_text_returns_empty():
+    assert adapters.parse_llm_output("") == []
+    assert adapters.parse_llm_output(None) == []
+
+
+def test_parse_llm_output_dedupes_repeated_ids():
+    text = "HP:0001250 appears here and again as HP_0001250."
+    assert adapters.parse_llm_output(text) == ["HP:0001250"]
+
+
 def test_normalize_record_in_place():
     rec = PredictionRecord(
         id="r", input_text="", gold_reference=["HP_0001250"], system_output=["hp:0000252"]
@@ -31,3 +42,32 @@ def test_normalize_record_in_place():
     assert out is rec
     assert rec.gold_reference == ["HP:0001250"]
     assert rec.system_output == ["HP:0000252"]
+
+
+class _ConvergingOntology:
+    """Two distinct raw ids that both resolve to the same primary id."""
+
+    version = "test-1.0"
+    ic_basis = "omim"
+
+    def resolve(self, hpo_id):
+        table = {
+            "HP:0000001": TermResolution("HP:0000001", "HP:0000001", "primary"),
+            "HP:0000002": TermResolution("HP:0000002", "HP:0000001", "alt_id"),
+        }
+        return table[hpo_id]
+
+
+def test_align_records_dedupes_when_two_ids_resolve_to_same_primary():
+    # HP:0000001 (primary) and HP:0000002 (alt_id) both resolve to HP:0000001;
+    # the aligned list must collapse them into a single entry.
+    records = [
+        PredictionRecord(
+            id="r1", input_text="",
+            gold_reference=["HP:0000001", "HP:0000002"],
+            system_output=[],
+        )
+    ]
+    aligned, alignment = adapters.align_records(records, _ConvergingOntology())
+    assert aligned[0].gold_reference == ["HP:0000001"]
+    assert alignment.alt_ids_resolved == 1

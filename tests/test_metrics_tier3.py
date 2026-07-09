@@ -57,6 +57,30 @@ def test_high_ic_spurious_fp_flag_and_zero_categories(ontology):
     assert result.aggregate["wrong_term"] == 0.0
 
 
+def test_missed_high_ic_does_not_fire_below_threshold(ontology):
+    # Same missed-term setup as test_missed_high_ic_flag, but the threshold is set
+    # above the term's IC, so the flag must NOT be raised even though it's missed.
+    rec = _rec("r1", ["HP:0011682"], [])
+    result = Tier3ClinicalMetric().compute(
+        [rec], EvalContext(ontology=ontology, config={"ic_high_threshold": 999.0})
+    )
+    assert result.aggregate["missed"] == 1.0
+    types = {f["type"] for f in result.details["flags"]}
+    assert "missed_high_ic" not in types
+
+
+def test_tier3_aggregate_sums_counts_across_documents(ontology):
+    # Two independent documents with the same spurious+missed pattern: the
+    # aggregate must be the summed per-document counts, not an average.
+    rec1 = _rec("r1", ["HP:0001629"], ["HP:0001250"])
+    rec2 = _rec("r2", ["HP:0001629"], ["HP:0001250"])
+    result = Tier3ClinicalMetric().compute([rec1, rec2], EvalContext(ontology=ontology))
+    assert result.aggregate["spurious"] == 2.0
+    assert result.aggregate["missed"] == 2.0
+    assert result.per_document["r1"]["spurious"] == 1.0
+    assert result.per_document["r2"]["spurious"] == 1.0
+
+
 def test_generic_ancestor_does_not_suppress_missed(ontology):
     # Predicting only the root (ancestor of everything) must NOT hide genuinely-missed golds.
     rec = _rec("r1", ["HP:0001250", "HP:0000252"], ["HP:0000118"])

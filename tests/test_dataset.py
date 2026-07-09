@@ -28,6 +28,17 @@ def test_jsonl_loader_requires_gold_reference(tmp_path):
         JSONLDatasetLoader(str(p)).load()
 
 
+def test_jsonl_loader_reraises_keyerror_for_other_missing_fields(tmp_path):
+    # A KeyError not caused by the (specially-handled) missing 'gold_reference'
+    # field must propagate as-is rather than being swallowed or rewrapped.
+    p = tmp_path / "bad.jsonl"
+    # str(obj["id"]) will KeyError on "id", which is a different key than the
+    # one the except clause specifically messages about.
+    p.write_text('{"input_text": "x", "gold_reference": []}\n', encoding="utf-8")
+    with pytest.raises(KeyError):
+        JSONLDatasetLoader(str(p)).load()
+
+
 def test_jsonl_loader_reports_malformed_json_line(tmp_path):
     p = tmp_path / "bad.jsonl"
     p.write_text(

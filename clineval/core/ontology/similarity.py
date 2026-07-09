@@ -49,6 +49,9 @@ def jaccard(term1: object, term2: object) -> float:
     a = _ancestors(term1) | {term1.id}
     b = _ancestors(term2) | {term2.id}
     union = a | b
-    if not union:
+    if not union:  # pragma: no cover
+        # Structurally unreachable: `a` always contains at least `{term1.id}`,
+        # so `union` can never be empty for any real PyHPO term. Kept as a
+        # defensive guard against a term whose `.id` construction changes.
         return 0.0
     return len(a & b) / len(union)
