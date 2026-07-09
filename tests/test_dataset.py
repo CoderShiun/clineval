@@ -24,5 +24,16 @@ def test_jsonl_loader_reads_records(tmp_path):
 def test_jsonl_loader_requires_gold_reference(tmp_path):
     p = tmp_path / "bad.jsonl"
     p.write_text('{"id": "r1", "input_text": "x"}\n', encoding="utf-8")
-    with pytest.raises(KeyError):
+    with pytest.raises(ValueError, match="gold_reference"):
+        JSONLDatasetLoader(str(p)).load()
+
+
+def test_jsonl_loader_reports_malformed_json_line(tmp_path):
+    p = tmp_path / "bad.jsonl"
+    p.write_text(
+        '{"id": "r1", "input_text": "x", "gold_reference": []}\n'
+        "not json\n",
+        encoding="utf-8",
+    )
+    with pytest.raises(ValueError, match="line 2"):
         JSONLDatasetLoader(str(p)).load()

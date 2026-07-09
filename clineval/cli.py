@@ -2,9 +2,11 @@
 
 from __future__ import annotations
 
+import json
 from datetime import datetime, timezone
 from pathlib import Path
 
+import openai
 import typer
 
 import clineval.tasks.hpo_extraction  # noqa: F401  (registers metrics on import)
@@ -55,20 +57,29 @@ def run(
     api_key: str = typer.Option("not-needed", help="API key for --live."),
 ) -> None:
     """Run an end-to-end evaluation and write a Markdown report."""
-    records = _load_dataset(dataset)
-    for rec in records:
-        adapters.normalize_record(rec)
-
-    if live:
-        extractor: object = OpenAICompatibleExtractor(base_url, model, api_key)
-        model_label = model
-    else:
-        extractor = CachedExtractor(cache)
-        model_label = f"cached:{extractor.model}"
-
-    for rec in records:
-        rec.system_output = extractor.extract(rec)
-        adapters.normalize_record(rec)
+    try:
+        records = _load_dataset(dataset)
+        for rec in records:
+            adapters.normalize_record(rec)
+        if live:
+            extractor: object = OpenAICompatibleExtractor(base_url, model, api_key)
+            model_label = model
+        else:
+            extractor = CachedExtractor(cache)
+            model_label = f"cached:{extractor.model}"
+        for rec in records:
+            rec.system_output = extractor.extract(rec)
+            adapters.normalize_record(rec)
+    except (FileNotFoundError, ValueError, json.JSONDecodeError) as exc:
+        typer.echo(f"Error: {exc}", err=True)
+        raise typer.Exit(code=1) from exc
+    except openai.OpenAIError as exc:
+        typer.echo(
+            f"Error: could not reach the LLM endpoint at {base_url} ({exc}). "
+            "From inside Docker, use --base-url http://host.docker.internal:1234/v1.",
+            err=True,
+        )
+        raise typer.Exit(code=1) from exc
 
     hits: int | None = None
     if not live:

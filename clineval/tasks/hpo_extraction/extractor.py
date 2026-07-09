@@ -26,17 +26,20 @@ class CachedExtractor:
         self.model = "unknown"
         self._by_id: dict[str, list[str]] = {}
         with open(path, encoding="utf-8") as fh:
-            for line in fh:
+            for n, line in enumerate(fh, start=1):
                 line = line.strip()
                 if not line:
                     continue
-                obj = json.loads(line)
-                if obj.get("_meta"):
-                    self.model = obj.get("model", "unknown")
-                    continue
-                self._by_id[str(obj["id"])] = adapters.normalize_hpo_ids(
-                    obj.get("system_output", [])
-                )
+                try:
+                    obj = json.loads(line)
+                    if obj.get("_meta"):
+                        self.model = obj.get("model", "unknown")
+                        continue
+                    self._by_id[str(obj["id"])] = adapters.normalize_hpo_ids(
+                        obj.get("system_output", [])
+                    )
+                except (json.JSONDecodeError, KeyError) as exc:
+                    raise ValueError(f"malformed cache line {n} in {path}: {exc}") from exc
 
     def extract(self, record: PredictionRecord) -> list[str]:
         return list(self._by_id.get(record.id, []))

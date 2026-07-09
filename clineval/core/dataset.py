@@ -29,18 +29,28 @@ class JSONLDatasetLoader(DatasetLoader):
     def load(self) -> list[PredictionRecord]:
         records: list[PredictionRecord] = []
         with open(self.path, encoding="utf-8") as fh:
-            for line in fh:
+            for n, line in enumerate(fh, start=1):
                 line = line.strip()
                 if not line:
                     continue
-                obj = json.loads(line)
-                records.append(
-                    PredictionRecord(
+                try:
+                    obj = json.loads(line)
+                except json.JSONDecodeError as exc:
+                    raise ValueError(f"{self.path} line {n}: invalid JSON ({exc})") from exc
+                try:
+                    record = PredictionRecord(
                         id=str(obj["id"]),
                         input_text=obj.get("input_text", ""),
                         gold_reference=list(obj["gold_reference"]),
                         system_output=list(obj.get("system_output", [])),
                         metadata=dict(obj.get("metadata", {})),
                     )
-                )
+                except KeyError as exc:
+                    if exc.args and exc.args[0] == "gold_reference":
+                        raise ValueError(
+                            f"{self.path} line {n}: record {obj.get('id', '?')!r} is "
+                            "missing required field 'gold_reference'"
+                        ) from exc
+                    raise
+                records.append(record)
         return records

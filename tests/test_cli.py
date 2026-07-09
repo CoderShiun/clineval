@@ -54,6 +54,47 @@ def test_cli_run_warns_on_cache_dataset_mismatch(tmp_path):
     assert "WARNING" in result.output
 
 
+def test_cli_run_missing_dataset_is_friendly_error(tmp_path):
+    out = tmp_path / "report.md"
+    result = runner.invoke(
+        app,
+        ["run", "--dataset", str(tmp_path / "nope.jsonl"), "--report", str(out)],
+    )
+    assert result.exit_code == 1
+    assert "Error" in result.output
+
+
+def test_cli_run_gsc_without_data_is_friendly_error(tmp_path, monkeypatch):
+    out = tmp_path / "report.md"
+    monkeypatch.chdir(tmp_path)
+    result = runner.invoke(
+        app,
+        ["run", "--dataset", "gsc", "--report", str(out)],
+    )
+    assert result.exit_code == 1
+    assert "download_gsc" in result.output
+
+
+def test_cli_run_missing_cache_is_friendly_error(tmp_path):
+    data = tmp_path / "mini.jsonl"
+    data.write_text(
+        '{"id": "r1", "input_text": "seizures", "gold_reference": ["HP:0001250"]}\n',
+        encoding="utf-8",
+    )
+    out = tmp_path / "report.md"
+    result = runner.invoke(
+        app,
+        [
+            "run",
+            "--dataset", str(data),
+            "--cache", str(tmp_path / "nope-cache.jsonl"),
+            "--report", str(out),
+        ],
+    )
+    assert result.exit_code == 1
+    assert "Error" in result.output
+
+
 class FakeExtractor:
     """Stand-in for OpenAICompatibleExtractor: no network, fixed prediction."""
 

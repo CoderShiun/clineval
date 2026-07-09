@@ -1,3 +1,5 @@
+import pytest
+
 from clineval.core.schema import PredictionRecord
 from clineval.tasks.hpo_extraction.extractor import CachedExtractor, OpenAICompatibleExtractor
 
@@ -14,6 +16,17 @@ def test_cached_extractor_replays_and_reads_model(tmp_path):
     rec = PredictionRecord(id="r1", input_text="", gold_reference=[])
     assert ext.extract(rec) == ["HP:0001250"]  # normalized + deduped
     assert ext.extract(PredictionRecord(id="missing", input_text="", gold_reference=[])) == []
+
+
+def test_cached_extractor_rejects_malformed_cache_line(tmp_path):
+    cache = tmp_path / "cache.jsonl"
+    cache.write_text(
+        '{"_meta": true, "model": "qwen-test"}\n'
+        '{"system_output": ["HP:0001250"]}\n',  # missing "id"
+        encoding="utf-8",
+    )
+    with pytest.raises(ValueError, match="malformed cache"):
+        CachedExtractor(str(cache))
 
 
 def test_openai_extractor_parses_response(monkeypatch):
