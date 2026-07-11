@@ -79,6 +79,19 @@ def test_jsonl_loader_rejects_non_object_metadata(tmp_path):
         JSONLDatasetLoader(str(p)).load()
 
 
+def test_jsonl_loader_rejects_duplicate_record_id(tmp_path):
+    # Two lines sharing an id would silently skew macro-averaged metrics
+    # (double-counting one document) — must fail loudly instead.
+    p = tmp_path / "bad.jsonl"
+    p.write_text(
+        '{"id": "r1", "input_text": "x", "gold_reference": ["HP:0001250"]}\n'
+        '{"id": "r1", "input_text": "y", "gold_reference": ["HP:0000252"]}\n',
+        encoding="utf-8",
+    )
+    with pytest.raises(ValueError, match="duplicate record id"):
+        JSONLDatasetLoader(str(p)).load()
+
+
 def test_jsonl_loader_rejects_non_object_line(tmp_path):
     # A whole-line bare scalar/array must fail cleanly, not raise a raw TypeError.
     p = tmp_path / "bad.jsonl"

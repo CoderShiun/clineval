@@ -18,6 +18,14 @@ def harmonic(precision: float, recall: float) -> float:
 
 
 def _exact_prf(gold: list[str], pred: list[str]) -> dict[str, float]:
+    # Empty-set convention (matches scikit-learn's default zero_division=0):
+    # a document scores 1.0 on precision/recall only when BOTH gold and
+    # prediction are empty (correctly predicting "nothing here"); a one-sided
+    # empty case (gold empty but pred non-empty, or vice versa) scores 0.0 on
+    # the affected metric rather than being excluded from the average. This
+    # is intentional, not a bug — it also governs the empty-side branches of
+    # ``_semantic_doc`` below (sem_precision/sem_recall and their IC-weighted
+    # variants).
     gold_set, pred_set = set(gold), set(pred)
     tp = len(gold_set & pred_set)
     if not pred_set:

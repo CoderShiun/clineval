@@ -89,6 +89,7 @@ clineval run [OPTIONS]
 | `--dataset` | `synthetic` | `synthetic` (bundled), `gsc` (downloaded — see §6), or a path to your own JSONL. |
 | `--report` | `reports/report.md` | Where to write the Markdown report (parent dirs are created). |
 | `--cache` | `examples/data/cached_predictions.jsonl` | Cached predictions to replay (offline default). |
+| `--predictions-from-dataset` | off | Score the predictions already present in the dataset JSONL (`system_output` field) instead of a cache or live model. Cannot be combined with `--live`. |
 | `--live` | off | Call a live local model instead of the cache (see §5). |
 | `--base-url` | `http://localhost:1234/v1` | OpenAI-compatible endpoint for `--live`. From Docker, use `http://host.docker.internal:1234/v1`. |
 | `--model` | `local-model` | Model name sent to the endpoint under `--live`. |
@@ -186,9 +187,10 @@ docker compose run --rm clineval uv run clineval run \
     --dataset mine.jsonl --cache my_predictions.jsonl --report reports/mine.md
 ```
 
-> Note: `clineval run` always gets predictions from the extractor (cache or `--live`); a
-> `system_output` field inside the **dataset** JSONL is not used — put predictions in a
-> **cache** file instead.
+> Note: by default `clineval run` gets predictions from the extractor (cache or `--live`); a
+> `system_output` field inside the **dataset** JSONL is ignored (with a warning) unless you
+> pass `--predictions-from-dataset`, which scores those dataset-supplied predictions directly
+> instead of consulting a cache or live model.
 
 **Regenerating the bundled cache from a live model:** the committed
 `examples/data/cached_predictions.jsonl` was produced by running the demo once with `--live`

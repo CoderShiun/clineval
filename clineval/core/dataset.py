@@ -28,6 +28,7 @@ class JSONLDatasetLoader(DatasetLoader):
 
     def load(self) -> list[PredictionRecord]:
         records: list[PredictionRecord] = []
+        seen_ids: set[str] = set()
         with open(self.path, encoding="utf-8") as fh:
             for n, line in enumerate(fh, start=1):
                 line = line.strip()
@@ -64,8 +65,15 @@ class JSONLDatasetLoader(DatasetLoader):
                         "'metadata' must be an object, got "
                         f"{type(obj['metadata']).__name__}"
                     )
+                rid = str(obj["id"])
+                if rid in seen_ids:
+                    raise ValueError(
+                        f"{self.path} line {n}: duplicate record id {rid!r} "
+                        "(record ids must be unique)"
+                    )
+                seen_ids.add(rid)
                 record = PredictionRecord(
-                    id=str(obj["id"]),
+                    id=rid,
                     input_text=obj.get("input_text", ""),
                     gold_reference=list(obj["gold_reference"]),
                     system_output=list(obj.get("system_output", [])),

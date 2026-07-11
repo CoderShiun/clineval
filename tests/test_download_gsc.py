@@ -26,3 +26,11 @@ def test_convert_raises_when_docs_but_no_annotations(tmp_path):
     out = tmp_path / "gsc_plus.jsonl"
     with pytest.raises(ValueError, match="parsed 0 HPO annotations"):
         download_gsc.convert(str(tmp_path), str(out))
+
+
+def test_convert_raises_when_no_txt_documents(tmp_path):
+    # An empty (or wrongly-laid-out) raw dir must fail loudly, not silently
+    # write a zero-record dataset that later looks like an all-zero report.
+    out = tmp_path / "gsc_plus.jsonl"
+    with pytest.raises(ValueError, match="no .txt documents"):
+        download_gsc.convert(str(tmp_path), str(out))

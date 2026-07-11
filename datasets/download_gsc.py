@@ -59,6 +59,13 @@ def convert(raw_dir: str, out_path: str) -> int:
             fh.write(json.dumps(record, ensure_ascii=False) + "\n")
             count += 1
 
+    if count == 0:
+        raise ValueError(
+            f"download_gsc.convert: found no .txt documents under {raw_dir!r} — the "
+            "extracted layout likely does not match the assumed one; see the module "
+            "docstring."
+        )
+
     total_ann = sum(len(v) for v in gold.values())
     if count and total_ann == 0:
         raise ValueError(

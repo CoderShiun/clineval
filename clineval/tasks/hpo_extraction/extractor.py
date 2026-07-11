@@ -57,6 +57,15 @@ class CachedExtractor:
         return record_id in self._by_id
 
 
+class DatasetExtractor:
+    """Score the predictions already present in each record's system_output."""
+
+    model = "dataset"
+
+    def extract(self, record: PredictionRecord) -> list[str]:
+        return list(record.system_output)
+
+
 class OpenAICompatibleExtractor:
     """Call a local OpenAI-compatible endpoint (LM Studio / Ollama / vLLM)."""
 

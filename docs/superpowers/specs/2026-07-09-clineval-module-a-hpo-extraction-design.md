@@ -133,6 +133,8 @@ The pipeline-level pass is the hard prerequisite for Tier 1 exact matching to wo
 
 All metrics are **document-level, macro-averaged** across documents. They are registered as a small set of focused `Metric` units under task `hpo_extraction`; each receives records + an `EvalContext` (loaded ontology + config) and returns a structured result the evaluator merges.
 
+**Empty-set convention:** matching scikit-learn's default `zero_division=0`, a document scores 1.0 on a precision/recall metric only when both the gold and predicted sets are empty; a one-sided empty case (one side empty, the other not) scores 0.0 on the affected metric rather than being excluded from the macro-average.
+
 ### Tier 1 — standard, exact match
 Precision, Recall, and `F1 = 2·P·R / (P + R)` on HPO concept IDs, via set operations, per document, then macro-averaged.
 

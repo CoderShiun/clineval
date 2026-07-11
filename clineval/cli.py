@@ -19,6 +19,7 @@ from clineval.tasks.hpo_extraction import adapters
 from clineval.tasks.hpo_extraction.datasets import GscPlusLoader
 from clineval.tasks.hpo_extraction.extractor import (
     CachedExtractor,
+    DatasetExtractor,
     OpenAICompatibleExtractor,
 )
 
@@ -57,6 +58,14 @@ def run(
     cache: str = typer.Option(
         "examples/data/cached_predictions.jsonl", help="Cached predictions path."
     ),
+    predictions_from_dataset: bool = typer.Option(
+        False,
+        "--predictions-from-dataset",
+        help=(
+            "Score predictions already present in the dataset JSONL (system_output "
+            "field) instead of a cache or live model."
+        ),
+    ),
     base_url: str = typer.Option("http://localhost:1234/v1", help="OpenAI-compatible URL."),
     model: str = typer.Option("local-model", help="Model name for --live."),
     api_key: str = typer.Option("not-needed", help="API key for --live."),
@@ -74,13 +83,35 @@ def run(
     if similarity_method not in _ALLOWED_SIMILARITY_METHODS:
         typer.echo("Error: --similarity-method must be one of: lin, jc, jaccard", err=True)
         raise typer.Exit(code=1)
+    if not 0.0 < relatedness_tau <= 1.0:
+        typer.echo("Error: --relatedness-tau must be in (0, 1].", err=True)
+        raise typer.Exit(code=1)
+    if ic_high_threshold < 0.0:
+        typer.echo("Error: --ic-high-threshold must be >= 0.", err=True)
+        raise typer.Exit(code=1)
+    if live and predictions_from_dataset:
+        typer.echo(
+            "Error: --live and --predictions-from-dataset cannot be combined.", err=True
+        )
+        raise typer.Exit(1)
     try:
         records = _load_dataset(dataset)
         for rec in records:
             adapters.normalize_record(rec)
+        dataset_has_predictions = any(rec.system_output for rec in records)
+        if not live and not predictions_from_dataset and dataset_has_predictions:
+            typer.echo(
+                "WARNING: the dataset supplies predictions (system_output) for some "
+                "records; they are ignored. Pass --predictions-from-dataset to score "
+                "them.",
+                err=True,
+            )
         if live:
             extractor: object = OpenAICompatibleExtractor(base_url, model, api_key)
             model_label = model
+        elif predictions_from_dataset:
+            extractor = DatasetExtractor()
+            model_label = "dataset"
         else:
             extractor = CachedExtractor(cache)
             model_label = f"cached:{extractor.model}"
@@ -99,7 +130,7 @@ def run(
         raise typer.Exit(code=1) from exc
 
     hits: int | None = None
-    if not live:
+    if not live and not predictions_from_dataset:
         hits = sum(1 for rec in records if extractor.covers(rec.id))
         model_label = f"cached:{extractor.model} [{hits}/{len(records)} cache hits]"
         if hits == 0:

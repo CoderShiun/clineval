@@ -225,6 +225,89 @@ def test_cli_run_accepts_tier3_config_flags(tmp_path):
     assert out.read_text(encoding="utf-8").startswith("# ClinEval Report")
 
 
+def test_cli_run_predictions_from_dataset_scores_supplied_output(tmp_path):
+    # The dataset already carries a correct system_output; --predictions-from-dataset
+    # must score it (not silently discard it in favor of the cache).
+    data = tmp_path / "mini.jsonl"
+    data.write_text(
+        '{"id": "r1", "input_text": "seizures", "gold_reference": ["HP:0001250"], '
+        '"system_output": ["HP:0001250"]}\n',
+        encoding="utf-8",
+    )
+    out = tmp_path / "report.md"
+    result = runner.invoke(
+        app,
+        [
+            "run",
+            "--dataset", str(data),
+            "--report", str(out),
+            "--predictions-from-dataset",
+        ],
+    )
+    assert result.exit_code == 0, result.output
+    text = out.read_text(encoding="utf-8")
+    assert "**Model:** dataset" in text
+    assert "exact | 1.000 | 1.000 | 1.000" in text
+
+
+def test_cli_run_without_flag_warns_and_ignores_dataset_predictions(tmp_path):
+    data = tmp_path / "mini.jsonl"
+    data.write_text(
+        '{"id": "r1", "input_text": "seizures", "gold_reference": ["HP:0001250"], '
+        '"system_output": ["HP:0001250"]}\n',
+        encoding="utf-8",
+    )
+    cache = tmp_path / "cache.jsonl"
+    cache.write_text(
+        '{"_meta": true, "model": "qwen-test"}\n'
+        '{"id": "r1", "system_output": ["HP:0001250"]}\n',
+        encoding="utf-8",
+    )
+    out = tmp_path / "report.md"
+    result = runner.invoke(
+        app,
+        ["run", "--dataset", str(data), "--cache", str(cache), "--report", str(out)],
+    )
+    assert result.exit_code == 0, result.output
+    assert "WARNING: the dataset supplies predictions" in result.output
+    assert "--predictions-from-dataset" in result.output
+
+
+def test_cli_run_rejects_live_and_predictions_from_dataset_combo(tmp_path):
+    out = tmp_path / "report.md"
+    result = runner.invoke(
+        app,
+        ["run", "--report", str(out), "--live", "--predictions-from-dataset"],
+    )
+    assert result.exit_code == 1
+    assert "--live and --predictions-from-dataset cannot be combined" in result.output
+    assert not out.exists()
+
+
+def test_cli_run_rejects_relatedness_tau_at_zero(tmp_path):
+    out = tmp_path / "report.md"
+    result = runner.invoke(app, ["run", "--report", str(out), "--relatedness-tau", "0.0"])
+    assert result.exit_code == 1
+    assert "--relatedness-tau must be in (0, 1]" in result.output
+    assert not out.exists()
+
+
+def test_cli_run_rejects_relatedness_tau_above_one(tmp_path):
+    out = tmp_path / "report.md"
+    result = runner.invoke(app, ["run", "--report", str(out), "--relatedness-tau", "1.5"])
+    assert result.exit_code == 1
+    assert "--relatedness-tau must be in (0, 1]" in result.output
+    assert not out.exists()
+
+
+def test_cli_run_rejects_negative_ic_high_threshold(tmp_path):
+    out = tmp_path / "report.md"
+    result = runner.invoke(app, ["run", "--report", str(out), "--ic-high-threshold", "-1"])
+    assert result.exit_code == 1
+    assert "--ic-high-threshold must be >= 0" in result.output
+    assert not out.exists()
+
+
 def test_cli_run_report_shows_pyhpo_version_and_cache_hits(tmp_path):
     out = tmp_path / "report.md"
     result = runner.invoke(app, ["run", "--report", str(out)])
