@@ -1,0 +1,4 @@
+{"id": "tut01", "input_text": "The patient had a seizure.", "gold_reference": ["HP:0001250"]}
+{"id": "tut02", "input_text": "Echocardiography showed a perimembranous ventricular septal defect.", "gold_reference": ["HP:0011682"]}
+{"id": "tut03", "input_text": "Head circumference below the 3rd percentile (microcephaly).", "gold_reference": ["HP:0000252"]}
+{"id": "tut04", "input_text": "The child has short stature.", "gold_reference": ["HP:0004322"]}

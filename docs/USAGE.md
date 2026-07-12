@@ -9,6 +9,10 @@ regulatory-evidence mapping. It is *not* a model builder; the thing being evalua
 Everything runs inside **Docker** — you do **not** install Python, uv, or any library on
 your machine.
 
+> **New to ClinEval?** Start with the plain-language [`GETTING_STARTED.md`](GETTING_STARTED.md)
+> (what the tool is, why an LLM is involved, cached vs live, and a tiny runnable example), then
+> come back here for the full reference.
+
 ---
 
 ## 1. Prerequisites (the only thing you need)
