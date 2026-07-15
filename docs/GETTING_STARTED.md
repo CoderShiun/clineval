@@ -128,13 +128,31 @@ number can't do — and what makes this useful for evaluating a clinical system.
 
 The score is built in **two steps**: score each document 0–1, then average the documents.
 
-**Step 1 — score each document.** Every document gets three numbers:
+**Step 1 — score each document.** First compare the predicted terms to the gold terms and count
+three things:
 
-- **Precision** = *of the terms the system predicted, how many were correct.*
-- **Recall** = *of the correct (gold) terms, how many the system found.*
-- **F1** = one balanced number combining them: `F1 = 2 × Precision × Recall / (Precision + Recall)`.
+- **True Positive (TP)** — a term in *both* lists (predicted *and* correct). A hit.
+- **False Positive (FP)** — a term *predicted but not* in the gold. An extra / wrong term.
+- **False Negative (FN)** — a term *in the gold but not predicted*. A missed term.
 
-In the tutorial each document has exactly **one** gold term, so F1 is simply 1 (got it) or 0 (didn't):
+From those three counts come the three scores:
+
+- **Precision = TP / (TP + FP)** — of everything you predicted, how much was right *(punishes
+  extra / wrong terms)*.
+- **Recall = TP / (TP + FN)** — of all the correct terms, how many you found *(punishes missed
+  terms)*.
+- **F1 = 2 × Precision × Recall / (Precision + Recall)** — one balanced number combining the two.
+
+In the tutorial, each document has exactly **one** gold term (and at most one prediction), so
+TP/FP/FN are only 0 or 1 and **Precision = Recall = F1** every time — that's why you only *saw*
+F1. They differ the moment a document has several terms. Example of a document where they differ:
+
+> gold = {Seizure, Microcephaly}; the system predicts {Seizure, Microcephaly, Hearing loss, Tall
+> stature} → **TP = 2, FP = 2, FN = 0** → **Precision = 2/4 = 0.50** (half its answers were junk),
+> **Recall = 2/2 = 1.00** (it found both correct terms), **F1 = 0.67**. Here precision and recall
+> clearly disagree, and F1 balances them.
+
+Back to the tutorial, where F1 is simply 1 (got it) or 0 (didn't):
 
 | Doc | What the system did | Exact F1 |
 |---|---|---|
@@ -142,10 +160,6 @@ In the tutorial each document has exactly **one** gold term, so F1 is simply 1 (
 | tut02 | predicted the *parent* term, not the exact one | **0.0** |
 | tut03 | predicted a made-up id | **0.0** |
 | tut04 | predicted nothing | **0.0** |
-
-> *(When a document has several terms, F1 is a fraction. E.g. gold = 2 terms, the system gets 1
-> right and adds nothing extra → Precision 1/1 = 1.0, Recall 1/2 = 0.5, F1 = 0.67. That's why the
-> bigger demo has scores like 0.5 and 0.67, not just 0 and 1.)*
 
 **Step 2 — average the documents.** The overall score is just the mean of the per-document F1s
 (this is called a *macro-average*):
@@ -164,8 +178,8 @@ Semantic overall F1 = (1.0 + 0.68 + 0.0 + 0.0) / 4 = 0.42
 
 So **"exact 0.25 → semantic 0.42" is the same four documents scored two ways.** The *only*
 document that moved is tut02 (0.00 → 0.68), and that single near-miss lifts the average by
-**0.17**. That gap is the message: "a chunk of what exact-match calls 'wrong' is actually
-clinically close."
+**0.17**. And that's all the "gap" is — plain subtraction: `semantic 0.42 − exact 0.25 = 0.17`.
+It's the message: "a chunk of what exact-match calls 'wrong' is actually clinically close."
 
 ### Is a score good or bad? What's "good enough"?
 
