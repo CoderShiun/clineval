@@ -135,15 +135,17 @@ Ten small, clearly-synthetic clinical sentences with gold HPO annotations
 (`examples/data/synthetic_mini.jsonl`). Fully offline; used by the quickstart and tests.
 
 ### `--dataset gsc` (the real GSC+ benchmark)
-GSC+ / BiolarkGSC+ (228 PubMed abstracts). ClinEval does **not** bundle third-party corpora —
-you fetch it with a script:
+GSC+ / BiolarkGSC+ (228 PubMed abstracts, Lobo et al. 2017). ClinEval does **not** bundle
+third-party corpora — you fetch it with a script (verified: downloads 228 documents from the
+PhenoTagger project's public `data/corpus.zip`):
 ```bash
-docker compose run --rm clineval uv run python datasets/download_gsc.py
-docker compose run --rm clineval uv run clineval run --dataset gsc --report reports/gsc.md
+docker compose run --rm clineval uv run python datasets/download_gsc.py       # → datasets/gsc_plus/gsc_plus.jsonl
+docker compose run --rm clineval uv run clineval run --dataset gsc \
+    --live --base-url http://host.docker.internal:1234/v1 --report reports/gsc.md
 ```
-> **Before you rely on this:** the download URL and the assumed on-disk format are marked
-> "verify before use" in `datasets/download_gsc.py` and `datasets/README.md`. Confirm the
-> current source and its **license** first, and adjust the script if the layout differs.
+GSC+ is the **gold standard only** — you still supply predictions (`--live` or a `--cache` file).
+> **Licence:** it's a third-party research corpus — confirm the licence terms for your use.
+> ClinEval downloads it at runtime and never commits the data.
 
 ### `--dataset <your-file>.jsonl` (bring your own gold)
 Point `--dataset` at your own JSON Lines file — **one JSON object per line**:

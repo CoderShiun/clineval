@@ -1,101 +1,122 @@
 """Fetch GSC+ (BiolarkGSC+) and convert it to ClinEval's JSONL schema.
 
-Output (git-ignored): datasets/gsc_plus/gsc_plus.jsonl with one record per line:
-{"id", "input_text", "gold_reference": ["HP:0000000", ...]}.
+Source: the GSC+ gold-standard corpus is distributed inside the PhenoTagger
+project's ``data/corpus.zip`` (``corpus/GSC/GSCplus_dev_gold.tsv`` and
+``GSCplus_test_gold.tsv``). GSC+ is 228 PubMed abstracts manually annotated with
+HPO terms (Lobo et al., 2017); PhenoTagger splits it into a dev and a test file,
+which this script combines.
 
-The download URL and license MUST be confirmed before use (see datasets/README.md).
-The converter is intentionally small and isolated so that, if the real GSC+ layout
-differs from the assumed one, only ``convert`` and the test fixture need adjusting.
+Format of each GSCplus_*_gold.tsv (PubTator-style, blank-line separated blocks):
+
+    <PMID>
+    <title + abstract text on one line>
+    <start>\t<end>\t<mention>\t<HP:id>
+    <start>\t<end>\t<mention>\t<HP:id>
+    ...
+    <blank line>
+
+Output (git-ignored): ``datasets/gsc_plus/gsc_plus.jsonl`` with one record per line:
+``{"id", "input_text", "gold_reference": ["HP:0000000", ...]}``.
+
+Licensing: the corpus is publicly redistributed via PhenoTagger (NCBI). Confirm
+the licence terms for *your* use before relying on it; ClinEval downloads it at
+runtime and never commits the data.
 """
 
 from __future__ import annotations
 
 import json
 import sys
-from collections import defaultdict
 from pathlib import Path
 
-# Verify this against the official GSC+ distribution before running download().
-GSC_PLUS_URL = "https://github.com/lasigeBioTM/IHP/raw/master/GSC%2B.zip"
+# GSC+ ships inside PhenoTagger's corpus.zip (public, NCBI). See module docstring.
+GSC_PLUS_URL = "https://raw.githubusercontent.com/ncbi-nlp/PhenoTagger/master/data/corpus.zip"
 DEFAULT_DEST = "datasets/gsc_plus"
 
 
-def convert(raw_dir: str, out_path: str) -> int:
-    """Convert an extracted GSC+ directory to normalized JSONL. Returns record count.
+def _parse_gscplus_file(path: Path, normalize_hpo_id) -> list[dict]:
+    """Parse one PubTator-style GSCplus_*_gold.tsv into record dicts."""
+    text = path.read_text(encoding="utf-8").replace("\r\n", "\n").replace("\r", "\n")
+    records: list[dict] = []
+    for block in text.strip("\n").split("\n\n"):
+        lines = [ln for ln in block.split("\n") if ln.strip()]
+        if len(lines) < 2:
+            continue
+        pmid = lines[0].strip()
+        # Text lines have no tab; annotation lines are tab-delimited.
+        text_lines = [ln.strip() for ln in lines[1:] if "\t" not in ln]
+        ann_lines = [ln for ln in lines[1:] if "\t" in ln]
+        gold: list[str] = []
+        for ln in ann_lines:
+            nid = None
+            for col in ln.split("\t"):  # HPO id is the last column; scan to be robust
+                nid = normalize_hpo_id(col)
+                if nid:
+                    break
+            if nid and nid not in gold:
+                gold.append(nid)
+        records.append(
+            {"id": pmid, "input_text": " ".join(text_lines), "gold_reference": gold}
+        )
+    return records
 
-    Assumes: for each document ``<ID>.txt`` (the abstract) there are annotation
-    rows in ``annotations.tsv`` with tab-separated columns
-    ``id, start, end, hpo_id, mention``. Adjust here if the real layout differs.
+
+def convert(raw_dir: str, out_path: str) -> int:
+    """Convert extracted GSC+ ``GSCplus_*_gold.tsv`` files to normalized JSONL.
+
+    Searches ``raw_dir`` recursively for ``GSCplus_*_gold.tsv`` (dev + test),
+    combines them (deduping by PMID), and writes one JSON record per document.
+    Returns the record count.
     """
     from clineval.tasks.hpo_extraction.adapters import normalize_hpo_id
 
-    raw = Path(raw_dir)
-    gold: dict[str, list[str]] = defaultdict(list)
-    ann_file = raw / "annotations.tsv"
-    if ann_file.exists():
-        for row in ann_file.read_text(encoding="utf-8").splitlines():
-            row = row.strip()
-            if not row:
+    files = sorted(Path(raw_dir).rglob("GSCplus_*_gold.tsv"))
+    records: list[dict] = []
+    seen: set[str] = set()
+    for f in files:
+        for rec in _parse_gscplus_file(f, normalize_hpo_id):
+            if rec["id"] in seen:
                 continue
-            parts = row.split("\t")
-            if len(parts) < 4:
-                continue
-            doc_id, hpo_raw = parts[0], parts[3]
-            nid = normalize_hpo_id(hpo_raw)
-            if nid and nid not in gold[doc_id]:
-                gold[doc_id].append(nid)
+            seen.add(rec["id"])
+            records.append(rec)
+
+    if not records:
+        raise ValueError(
+            f"download_gsc.convert: found no GSCplus_*_gold.tsv documents under "
+            f"{raw_dir!r} — the extracted layout likely does not match; see the "
+            "module docstring."
+        )
+    if sum(len(r["gold_reference"]) for r in records) == 0:
+        raise ValueError(
+            f"download_gsc.convert: parsed 0 HPO annotations from {raw_dir!r} though "
+            "documents were found — the annotation format likely does not match; see "
+            "the module docstring."
+        )
 
     out = Path(out_path)
     out.parent.mkdir(parents=True, exist_ok=True)
-    count = 0
     with out.open("w", encoding="utf-8") as fh:
-        for txt in sorted(raw.glob("*.txt")):
-            doc_id = txt.stem
-            record = {
-                "id": doc_id,
-                "input_text": txt.read_text(encoding="utf-8").strip(),
-                "gold_reference": gold.get(doc_id, []),
-            }
-            fh.write(json.dumps(record, ensure_ascii=False) + "\n")
-            count += 1
-
-    if count == 0:
-        raise ValueError(
-            f"download_gsc.convert: found no .txt documents under {raw_dir!r} — the "
-            "extracted layout likely does not match the assumed one; see the module "
-            "docstring."
-        )
-
-    total_ann = sum(len(v) for v in gold.values())
-    if count and total_ann == 0:
-        raise ValueError(
-            "download_gsc.convert: parsed 0 HPO annotations from "
-            f"{raw_dir!r} though .txt docs were found — the annotation format/path "
-            "likely does not match the assumed 'annotations.tsv' layout; see the "
-            "module docstring."
-        )
-    return count
+        for rec in records:
+            fh.write(json.dumps(rec, ensure_ascii=False) + "\n")
+    return len(records)
 
 
 def download(dest: str = DEFAULT_DEST) -> None:
-    """Download + extract GSC+ into ``dest`` and convert to gsc_plus.jsonl.
-
-    Network fetch is intentionally explicit so licensing can be reviewed first.
-    """
+    """Download + extract the corpus and convert GSC+ to gsc_plus.jsonl."""
     import io
     import urllib.request
     import zipfile
 
     dest_dir = Path(dest)
-    dest_dir.mkdir(parents=True, exist_ok=True)
-    print(f"Downloading GSC+ from {GSC_PLUS_URL} ...")
-    # URL must be verified before use — see module docstring.
-    with urllib.request.urlopen(GSC_PLUS_URL, timeout=60) as resp:  # noqa: S310
+    raw = dest_dir / "raw"
+    raw.mkdir(parents=True, exist_ok=True)
+    print(f"Downloading GSC+ (via PhenoTagger corpus) from {GSC_PLUS_URL} ...")
+    with urllib.request.urlopen(GSC_PLUS_URL, timeout=120) as resp:  # noqa: S310
         data = resp.read()
     with zipfile.ZipFile(io.BytesIO(data)) as zf:
-        zf.extractall(dest_dir / "raw")
-    n = convert(str(dest_dir / "raw"), str(dest_dir / "gsc_plus.jsonl"))
-    print(f"Wrote {n} records to {dest_dir / 'gsc_plus.jsonl'}")
+        zf.extractall(raw)
+    n = convert(str(raw), str(dest_dir / "gsc_plus.jsonl"))
+    print(f"Wrote {n} GSC+ documents to {dest_dir / 'gsc_plus.jsonl'}")
 
 
 if __name__ == "__main__":

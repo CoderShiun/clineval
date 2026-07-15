@@ -4,17 +4,24 @@ ClinEval does **not** commit third-party corpora. Fetch GSC+ with the downloader
 
 ## GSC+ / BiolarkGSC+
 
-228 PubMed abstracts annotated with HPO concepts (Lobo et al., 2017).
+228 PubMed abstracts manually annotated with HPO concepts (Lobo et al., 2017).
 
 ```bash
-docker compose run --rm clineval python datasets/download_gsc.py   # writes datasets/gsc_plus/gsc_plus.jsonl (git-ignored)
-docker compose run --rm clineval uv run clineval run --dataset gsc --report reports/gsc.md
+# Downloads + converts to datasets/gsc_plus/gsc_plus.jsonl (git-ignored). Verified: 228 docs.
+docker compose run --rm clineval uv run python datasets/download_gsc.py
+# Then evaluate your system's predictions on it (live model, or a predictions cache):
+docker compose run --rm clineval uv run clineval run --dataset gsc \
+    --live --base-url http://host.docker.internal:1234/v1 --report reports/gsc.md
 ```
 
-**Before running:** confirm the current download source and its **license** permit
-your use, and update `GSC_PLUS_URL` / `convert()` in `download_gsc.py` to match the
-official distribution's actual layout. The converter's assumed format is documented
-in its docstring and mirrored by `tests/fixtures/gsc_sample/`.
+**Source:** GSC+ ships inside the PhenoTagger project's public `data/corpus.zip`
+(`corpus/GSC/GSCplus_{dev,test}_gold.tsv`, PubTator format); `download_gsc.py` points
+at it and combines the dev + test files into the 228-document corpus. **Confirm the
+corpus licence terms for your use** — ClinEval downloads it at runtime and never
+commits the data. The parser is covered by `tests/fixtures/gsc_sample/`.
+
+Remember GSC+ is the **gold standard only** — you still supply predictions from the
+system you are evaluating (`--live` or a `--cache` file).
 
 ## BioCreative VIII Track 3
 

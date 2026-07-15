@@ -225,10 +225,10 @@ the point from §2: even with a gold corpus, you still need a "student" to take 
        --cache my_gsc_predictions.jsonl --report reports/gsc.md
    ```
 
-> ⚠️ **Verify before you rely on it.** The download URL and the assumed on-disk layout are marked
-> "verify before use" in `datasets/download_gsc.py` — confirm GSC+'s current source and its
-> **license**, and adjust the converter if the real file layout differs. Treat this as
-> "wire it up and check," not a guaranteed one-command download.
+> **Source & licence.** The script downloads GSC+ from the PhenoTagger project's public
+> `data/corpus.zip` and combines its dev + test files into the 228-document corpus (verified
+> working). It's a third-party research corpus — **confirm the licence terms for your use.**
+> ClinEval downloads it at runtime and never commits the data.
 
 ---
 
