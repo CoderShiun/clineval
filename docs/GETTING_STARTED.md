@@ -124,9 +124,115 @@ wrong" and stop there. But the three errors are *completely different problems*:
 Separating "close but not exact" from "completely wrong" from "made it up" is what a single F1
 number can't do — and what makes this useful for evaluating a clinical system.
 
+### Where does "0.25 → 0.42" actually come from? (the math)
+
+The score is built in **two steps**: score each document 0–1, then average the documents.
+
+**Step 1 — score each document.** Every document gets three numbers:
+
+- **Precision** = *of the terms the system predicted, how many were correct.*
+- **Recall** = *of the correct (gold) terms, how many the system found.*
+- **F1** = one balanced number combining them: `F1 = 2 × Precision × Recall / (Precision + Recall)`.
+
+In the tutorial each document has exactly **one** gold term, so F1 is simply 1 (got it) or 0 (didn't):
+
+| Doc | What the system did | Exact F1 |
+|---|---|---|
+| tut01 | predicted the exact term | **1.0** |
+| tut02 | predicted the *parent* term, not the exact one | **0.0** |
+| tut03 | predicted a made-up id | **0.0** |
+| tut04 | predicted nothing | **0.0** |
+
+> *(When a document has several terms, F1 is a fraction. E.g. gold = 2 terms, the system gets 1
+> right and adds nothing extra → Precision 1/1 = 1.0, Recall 1/2 = 0.5, F1 = 0.67. That's why the
+> bigger demo has scores like 0.5 and 0.67, not just 0 and 1.)*
+
+**Step 2 — average the documents.** The overall score is just the mean of the per-document F1s
+(this is called a *macro-average*):
+
+```
+Exact overall F1 = (1.0 + 0.0 + 0.0 + 0.0) / 4 = 0.25
+```
+
+**The semantic score repeats Step 2 with partial credit.** Instead of "exact match = 1, else 0,"
+it gives partial credit for how *close* the predicted term sits in the HPO tree. tut02 predicted
+the *parent* of the right term, so instead of 0 it earns **0.68**:
+
+```
+Semantic overall F1 = (1.0 + 0.68 + 0.0 + 0.0) / 4 = 0.42
+```
+
+So **"exact 0.25 → semantic 0.42" is the same four documents scored two ways.** The *only*
+document that moved is tut02 (0.00 → 0.68), and that single near-miss lifts the average by
+**0.17**. That gap is the message: "a chunk of what exact-match calls 'wrong' is actually
+clinically close."
+
+### Is a score good or bad? What's "good enough"?
+
+F1 runs from **0** (everything wrong) to **1** (perfect). Rough reference points for HPO
+extraction, to calibrate your intuition:
+
+| F1 | Rough reading |
+|---|---|
+| **< 0.3** | Poor — e.g. a raw LLM with no help hallucinates badly (~0.12 in published tests). |
+| **0.5 – 0.7** | Moderate. |
+| **0.7 – 0.8** | Good — competitive with dedicated tools (PhenoTagger ≈ 0.74–0.77; an LLM with retrieval help ≈ 0.80). |
+| **> 0.8** | Strong. |
+
+The tutorial's **0.25 is deliberately low** — it's a 4-document toy with one hit, one near-miss,
+one hallucination, and one miss. It is not meant to look like a real system. (The bigger bundled
+demo, ~0.62 exact / ~0.73 semantic, is a more realistic "decent model" level.)
+
+**But there is no universal passing grade.** "Good enough" is something *you* decide for *your*
+use case, ideally *before* you run. In a clinical / regulated setting the single F1 matters less
+than:
+
+- the **exact → semantic gap** (are the errors near-misses or hallucinations?),
+- **zero missed high-IC (rare) phenotypes** — a missed rare finding can change a diagnosis,
+- **few or zero spurious / hallucinated terms.**
+
+ClinEval gives you all of these numbers; *you* set the acceptance thresholds based on intended
+use and risk. "We defined criteria, then measured against them" is exactly the evidence a
+regulated validation needs — and it's why the report maps each metric to the regulatory clauses.
+
 ---
 
-## 6. Now make it your own
+## 6. What is GSC+, and how do I use it?
+
+**GSC+** (also written *BiolarkGSC+*) is a **benchmark answer key**: 228 PubMed abstracts that
+experts manually annotated with the correct HPO terms (Lobo et al., 2017). It's the standard
+yardstick in this field — evaluating on GSC+ makes your numbers comparable to published tools.
+
+**Important:** GSC+ gives you the **gold standard only** (the answer key). It does **not** include
+predictions — you still run *your own* system over those 228 abstracts to produce them (exactly
+the point from §2: even with a gold corpus, you still need a "student" to take the exam).
+
+**How to use it:**
+
+1. **Download + convert it** to ClinEval's format (writes `datasets/gsc_plus/gsc_plus.jsonl`,
+   which is git-ignored):
+   ```bash
+   docker compose run --rm clineval uv run python datasets/download_gsc.py
+   ```
+2. **Get predictions** from the system you're testing over those abstracts, then grade with
+   `--dataset gsc`:
+   ```bash
+   # live model:
+   docker compose run --rm clineval uv run clineval run --dataset gsc \
+       --live --base-url http://host.docker.internal:1234/v1 --report reports/gsc.md
+   # or a saved predictions cache:
+   docker compose run --rm clineval uv run clineval run --dataset gsc \
+       --cache my_gsc_predictions.jsonl --report reports/gsc.md
+   ```
+
+> ⚠️ **Verify before you rely on it.** The download URL and the assumed on-disk layout are marked
+> "verify before use" in `datasets/download_gsc.py` — confirm GSC+'s current source and its
+> **license**, and adjust the converter if the real file layout differs. Treat this as
+> "wire it up and check," not a guaranteed one-command download.
+
+---
+
+## 7. Now make it your own
 
 1. **Gold file** — copy `tutorial_gold.jsonl` and replace it with *your* documents and their
    correct HPO terms (one JSON object per line; look terms up at
@@ -145,7 +251,7 @@ number can't do — and what makes this useful for evaluating a clinical system.
 
 ---
 
-## 7. Where to go next
+## 8. Where to go next
 
 - **Full command reference** (every flag, dataset sources, cache format, troubleshooting):
   [`USAGE.md`](USAGE.md)
