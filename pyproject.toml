@@ -17,6 +17,8 @@ dependencies = [
 
 [project.optional-dependencies]
 dev = ["pytest>=8.0", "ruff>=0.6"]
+# Only needed to build the HGMD-derived benchmark gold (datasets/build_hgmd_gold.py).
+hgmd = ["psycopg[binary]>=3.1"]
 
 [project.scripts]
 clineval = "clineval.cli:app"

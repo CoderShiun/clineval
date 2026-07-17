@@ -14,3 +14,14 @@ __pycache__/
 # Generated reports and downloaded datasets
 reports/
 datasets/gsc_plus/
+
+# Retrieval: request cache + private HGMD-derived gold (LICENSED — never commit)
+.cache/
+datasets/ryr1_benchmark/
+datasets/hgmd_gold/
+
+# HGMD-derived DB dumps / schema (licensed structure — keep out of the open-source repo)
+data/
+
+# Lab panel gene lists derived from internal panel definitions (keep internal)
+datasets/panel_genes.txt
