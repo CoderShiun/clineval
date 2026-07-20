@@ -6,37 +6,26 @@ Tiers 2 and 3 (added in later tasks) read the loaded ontology from
 
 from __future__ import annotations
 
-from clineval.core.metric import EvalContext, Metric, macro_average, register_metric
+from clineval.core.metric import (
+    EvalContext,
+    Metric,
+    harmonic,
+    macro_average,
+    register_metric,
+    set_prf,
+)
 from clineval.core.schema import MetricResult, PredictionRecord
 
 
-def harmonic(precision: float, recall: float) -> float:
-    """Harmonic mean; 0.0 when both are 0."""
-    if precision + recall == 0:
-        return 0.0
-    return 2 * precision * recall / (precision + recall)
-
-
 def _exact_prf(gold: list[str], pred: list[str]) -> dict[str, float]:
-    # Empty-set convention (matches scikit-learn's default zero_division=0):
-    # a document scores 1.0 on precision/recall only when BOTH gold and
-    # prediction are empty (correctly predicting "nothing here"); a one-sided
-    # empty case (gold empty but pred non-empty, or vice versa) scores 0.0 on
-    # the affected metric rather than being excluded from the average. This
-    # is intentional, not a bug — it also governs the empty-side branches of
-    # ``_semantic_doc`` below (sem_precision/sem_recall and their IC-weighted
-    # variants).
-    gold_set, pred_set = set(gold), set(pred)
-    tp = len(gold_set & pred_set)
-    if not pred_set:
-        precision = 1.0 if not gold_set else 0.0
-    else:
-        precision = tp / len(pred_set)
-    if not gold_set:
-        recall = 1.0 if not pred_set else 0.0
-    else:
-        recall = tp / len(gold_set)
-    return {"precision": precision, "recall": recall, "f1": harmonic(precision, recall)}
+    """Exact set precision/recall/F1 — delegates to the shared ``core.metric.set_prf``.
+
+    The empty-set convention (scikit-learn's ``zero_division=0``) documented on
+    ``set_prf`` also governs the empty-side branches of ``_semantic_doc`` below
+    (sem_precision/sem_recall and their IC-weighted variants). Promoting this
+    scorer to the core leaves behaviour unchanged.
+    """
+    return set_prf(gold, pred)
 
 
 @register_metric("hpo_extraction")

@@ -20,8 +20,11 @@ datasets/gsc_plus/
 datasets/ryr1_benchmark/
 datasets/hgmd_gold/
 
-# HGMD-derived DB dumps / schema (licensed structure — keep out of the open-source repo)
-data/
+# HGMD-derived DB dumps / schema / exports (licensed — keep out of the open-source repo)
+# `/data/` is root-anchored so it does NOT also ignore examples/data/ tutorial fixtures.
+/data/
+datasets/*.vcf
+datasets/hgmd_pro_*
 
 # Lab panel gene lists derived from internal panel definitions (keep internal)
 datasets/panel_genes.txt

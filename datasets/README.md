@@ -32,6 +32,45 @@ ClinEval pipeline itself **never calls HGMD** — this is evaluation truth only.
 For each variant it unions the associated PMIDs from `allmut.pmid` + the pipe-delimited
 `allmut.pmidall` + `extrarefs.pmid`, keyed by `acc_num`, and writes ClinEval's gold schema.
 
+### Data provenance — what comes from where
+
+There are **two inputs with two very different roles** (nothing is fabricated):
+
+| Input | Role | Appears in the output JSON? |
+|---|---|---|
+| **HGMD database** | Supplies **all the data** — the variants and the PMIDs | **Yes — every field.** |
+| **A gene list** (`--genes` / `--genes-file`) | A **selector** — decides *which genes* to pull | **No** — it only chooses which HGMD rows come out. |
+
+Shopping-list analogy: the gene list is the *shopping list* (which genes), HGMD is the *store*
+(the actual variants + papers), and the JSON is the *groceries you brought home* — everything in
+it came from the store. Every *data* field — the variant and its PMIDs — originates in HGMD
+(the record also carries two bookkeeping fields not shown below: a constant `source: "hgmd"`
+and a computed `n_pmids`):
+
+```jsonc
+{"id": "NM_000540.3:c.1840C>T",      // ← allmut.refseq + allmut.hgvs
+ "gold_reference": ["8477729", ...],  // ← allmut.pmid ∪ split(allmut.pmidall) ∪ extrarefs.pmid
+ "metadata": {"gene": "RYR1",         // ← allmut.gene  (HGMD's own column — NOT the gene list)
+              "hgmd_accs": ["CM..."],  // ← HGMD accession(s)
+              "primary_pmids": [...],  // ← allmut.pmid
+              "tags": ["DM"]}}         // ← allmut.tag  (internal stratification only)
+```
+Two HGMD accessions describing the same canonical variant are **merged into one record** (PMIDs
+unioned) so record ids stay unique, as ClinEval's loader requires.
+
+### Providing the gene list
+
+Gene **symbols only**, one per line — HGNC symbols matching HGMD's `gene` column. Use
+`--genes RYR1,CACNA1S` for a handful, or `--genes-file <path>` for many. The list can come from
+anywhere (a hand-written file, a panel export, …). Example: derive it from gene-panel TSVs whose
+first column is the symbol (with a header row):
+```bash
+awk -F'\t' 'FNR>1 && $1!="" {print $1}' my_panels/*.tsv \
+  | grep -E '^[A-Za-z0-9][A-Za-z0-9._-]*$' | sort -u > datasets/panel_genes.txt
+```
+Genes absent from HGMD (or spelled with a different alias) simply contribute no variants — the
+count is reported in the meta sidecar, never an error.
+
 **Connecting.** The builder uses standard libpq env vars (`PGHOST/PGPORT/PGDATABASE/PGUSER`,
 and `PGPASSWORD` when required). Two common setups:
 
@@ -67,7 +106,8 @@ Then, once the retrieval pipeline is implemented, score the free stack against t
 docker compose run --rm clineval uv run clineval retrieval-eval \
     --dataset datasets/hgmd_gold/ryr1_gold.jsonl --source cached --report reports/retrieval.md
 ```
-(Verified 2026-07-17 against `hgmd:2026.2-postgres`: RYR1 → 1,506 variants, 596 distinct PMIDs.)
+(Verified 2026-07-17 against `hgmd:2026.2-postgres`: RYR1 → 1,505 variants / 596 PMIDs;
+full Routine panel (2,760 genes) → 347,008 variants / 92,230 PMIDs.)
 
 A `*.jsonl.meta.json` sidecar records the HGMD release, gene/tag filters, variant + distinct-PMID
 counts, and how many in-scope variants had **no** citable PMID (excluded, not silently dropped).
