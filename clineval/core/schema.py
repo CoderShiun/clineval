@@ -52,8 +52,13 @@ class EvaluationResult:
     model: str
     timestamp: str
     metrics: list[MetricResult]
-    alignment: OntologyAlignment
+    # Optional: HPO tasks pass an OntologyAlignment; retrieval and other
+    # non-ontology tasks leave it None and use ``provenance`` instead.
+    alignment: OntologyAlignment | None = None
     records: list[PredictionRecord] = field(default_factory=list)
+    # Task-agnostic run provenance (tool/DB versions, cache stats, ...). The
+    # retrieval-side analog of OntologyAlignment for the IVDR evidence snapshot.
+    provenance: dict[str, Any] = field(default_factory=dict)
 
     def metric(self, name: str) -> MetricResult | None:
         for m in self.metrics:

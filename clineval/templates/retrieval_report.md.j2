@@ -1,0 +1,57 @@
+# ClinEval — Variant Literature Retrieval Report
+
+- **Dataset:** {{ r.dataset }}  ·  **Variants:** {{ r.n_documents }}  ·  **Retriever:** {{ r.model }}
+- **Timestamp:** {{ r.timestamp }}
+{% if provenance %}
+- **Provenance:** {{ provenance }}
+{% endif %}
+
+## Aggregate scores (recall is the headline)
+
+| Metric | Macro | Micro |
+|---|---|---|
+| **Recall** | **{{ '%.3f'|format(agg.recall) }}** | {{ '%.3f'|format(agg.micro_recall) }} |
+| Precision (context) | {{ '%.3f'|format(agg.precision) }} | {{ '%.3f'|format(agg.micro_precision) }} |
+| F1 | {{ '%.3f'|format(agg.f1) }} | {{ '%.3f'|format(agg.micro_f1) }} |
+| Mean yield (papers/variant) | {{ '%.2f'|format(agg.mean_yield) }} | |
+
+> Precision is contextual in Phase 1: with a primary-references-only gold and no ranking, a
+> correct-but-non-primary paper is charged as a false positive. Read recall first.
+
+## Per-variant breakdown
+
+| Variant | gold | retrieved | found | missed | recall | precision |
+|---|---|---|---|---|---|---|
+{% for vid, d in per_doc.items() %}
+| {{ vid }} | {{ d.gold_n|int }} | {{ d.retrieved_n|int }} | {{ d.found_n|int }} | {{ d.missed_n|int }} | {{ '%.2f'|format(d.recall) }} | {{ '%.2f'|format(d.precision) }} |
+{% endfor %}
+
+## Missed evidence (false negatives)
+
+{% if missed %}
+{% for vid, pmids in missed.items() %}
+- **{{ vid }}**: {{ pmids|join(', ') }}
+{% endfor %}
+{% else %}
+None — every gold reference was retrieved.
+{% endif %}
+
+## Unresolved variants (flagged, not dropped)
+
+{% if unresolved %}
+{{ unresolved|join(', ') }}
+{% else %}
+None — all variants normalized to a protein consequence.
+{% endif %}
+
+## Regulatory Evidence Mapping
+
+| ClinEval evidence | EU AI Act | IVDR | ISO 15189:2022 |
+|---|---|---|---|
+{% for row in rows %}
+| {{ row.evidence }} | {{ row.ai_act }} | {{ row.ivdr }} | {{ row.iso15189 }} |
+{% endfor %}
+
+---
+
+_{{ disclaimer }}_

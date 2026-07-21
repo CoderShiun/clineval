@@ -1,0 +1,3 @@
+{"id": "NM_000540.3:c.1840C>T", "input_text": "NM_000540.3:c.1840C>T", "gold_reference": ["99000001", "99000002"], "metadata": {"gene": "RYR1", "source": "synthetic_demo"}}
+{"id": "NM_000540.3:c.7300G>A", "input_text": "NM_000540.3:c.7300G>A", "gold_reference": ["99000003"], "metadata": {"gene": "RYR1", "source": "synthetic_demo"}}
+{"id": "NM_000540.3:c.1840+1G>A", "input_text": "NM_000540.3:c.1840+1G>A", "gold_reference": ["99000004"], "metadata": {"gene": "RYR1", "source": "synthetic_demo", "hard_case": "intronic"}}

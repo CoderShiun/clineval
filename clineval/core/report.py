@@ -4,34 +4,20 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from jinja2 import Environment, FileSystemLoader
-
-from clineval.core.schema import EvaluationResult, MetricResult
+from clineval.core.render import make_markdown_env, require_metric
+from clineval.core.schema import EvaluationResult
 from clineval.regulatory import mapping
 
 _TEMPLATE_DIR = Path(__file__).resolve().parent.parent / "templates"
 
 
-def _metric(result: EvaluationResult, name: str) -> MetricResult:
-    found = result.metric(name)
-    if found is None:
-        raise ValueError(f"missing metric '{name}' in result")
-    return found
-
-
 def render_report(result: EvaluationResult) -> str:
     """Return the Markdown report for an evaluation result."""
-    env = Environment(
-        loader=FileSystemLoader(str(_TEMPLATE_DIR)),
-        autoescape=False,
-        trim_blocks=True,
-        lstrip_blocks=True,
-        keep_trailing_newline=True,
-    )
+    env = make_markdown_env(str(_TEMPLATE_DIR))
     template = env.get_template("report.md.j2")
-    tier1 = _metric(result, "tier1_exact")
-    tier2 = _metric(result, "tier2_semantic")
-    tier3 = _metric(result, "tier3_clinical")
+    tier1 = require_metric(result, "tier1_exact")
+    tier2 = require_metric(result, "tier2_semantic")
+    tier3 = require_metric(result, "tier3_clinical")
     exact_f1 = tier1.aggregate.get("f1", 0.0)
     sem_f1 = tier2.aggregate.get("sem_f1", 0.0)
     obsolete_ids = result.alignment.obsolete_ids

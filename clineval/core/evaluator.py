@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from typing import Any
+
 from clineval.core.metric import EvalContext, get_metrics
 from clineval.core.schema import EvaluationResult, OntologyAlignment, PredictionRecord
 
@@ -14,9 +16,14 @@ def evaluate(
     dataset: str,
     model: str,
     timestamp: str,
-    alignment: OntologyAlignment,
+    alignment: OntologyAlignment | None = None,
+    provenance: dict[str, Any] | None = None,
 ) -> EvaluationResult:
-    """Evaluate ``records`` with every metric registered under ``task``."""
+    """Evaluate ``records`` with every metric registered under ``task``.
+
+    ``alignment`` is for ontology tasks (HPO); non-ontology tasks (e.g. variant
+    retrieval) pass ``provenance`` instead. Both are optional and independent.
+    """
     metrics = get_metrics(task)
     if not metrics:
         raise ValueError(
@@ -33,4 +40,5 @@ def evaluate(
         metrics=results,
         alignment=alignment,
         records=records,
+        provenance=provenance or {},
     )

@@ -42,3 +42,36 @@ REGULATORY_ROWS: list[dict[str, str]] = [
 def get_mapping_rows() -> list[dict[str, str]]:
     """Return a copy of the regulatory mapping rows."""
     return [dict(row) for row in REGULATORY_ROWS]
+
+
+RETRIEVAL_ROWS: list[dict[str, str]] = [
+    {
+        "evidence": "Retrieval recall vs known references",
+        "ai_act": "Art 15 (accuracy)",
+        "ivdr": "Annex XIII analytical performance / performance evaluation",
+        "iso15189": "7.3.3 validation of examination methods",
+    },
+    {
+        "evidence": "Yield / precision context",
+        "ai_act": "Art 15 (appropriate accuracy metrics)",
+        "ivdr": "performance evaluation",
+        "iso15189": "7.3.3 validation of examination methods",
+    },
+    {
+        "evidence": "Evidence snapshot / tool-version provenance",
+        "ai_act": "Art 12 (logging & traceability)",
+        "ivdr": "technical documentation",
+        "iso15189": "Clause 8 (control of records)",
+    },
+    {
+        "evidence": "Unresolved-variant flagging (no silent drop)",
+        "ai_act": "Art 15 (robustness)",
+        "ivdr": "risk / performance evidence",
+        "iso15189": "7.3.7 ensuring validity of results",
+    },
+]
+
+
+def get_retrieval_mapping_rows() -> list[dict[str, str]]:
+    """Return a copy of the variant-retrieval regulatory mapping rows."""
+    return [dict(row) for row in RETRIEVAL_ROWS]
