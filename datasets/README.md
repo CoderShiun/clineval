@@ -49,7 +49,7 @@ and a computed `n_pmids`):
 
 ```jsonc
 {"id": "NM_000540.3:c.1840C>T",      // ← allmut.refseq + allmut.hgvs
- "gold_reference": ["8477729", ...],  // ← allmut.pmid ∪ split(allmut.pmidall) ∪ extrarefs.pmid
+ "gold_reference": ["<pmid>", ...],   // ← allmut.pmid ∪ split(allmut.pmidall) ∪ extrarefs.pmid
  "metadata": {"gene": "RYR1",         // ← allmut.gene  (HGMD's own column — NOT the gene list)
               "hgmd_accs": ["CM..."],  // ← HGMD accession(s)
               "primary_pmids": [...],  // ← allmut.pmid

@@ -1836,8 +1836,8 @@ never be committed — see design spec §8). This committed fixture uses illustr
 `source: "synthetic_demo"` purely to power offline tests and the zero-setup demo. The intronic row
 exercises the `resolved=false` path:
 ```json
-{"id": "NM_000540.3:c.1840C>T", "input_text": "NM_000540.3:c.1840C>T", "gold_reference": ["8477729", "10484775"], "metadata": {"gene": "RYR1", "source": "synthetic_demo"}}
-{"id": "NM_000540.3:c.7300G>A", "input_text": "NM_000540.3:c.7300G>A", "gold_reference": ["9333239"], "metadata": {"gene": "RYR1", "source": "synthetic_demo"}}
+{"id": "NM_000540.3:c.1840C>T", "input_text": "NM_000540.3:c.1840C>T", "gold_reference": ["99000001", "99000002"], "metadata": {"gene": "RYR1", "source": "synthetic_demo"}}
+{"id": "NM_000540.3:c.7300G>A", "input_text": "NM_000540.3:c.7300G>A", "gold_reference": ["99000003"], "metadata": {"gene": "RYR1", "source": "synthetic_demo"}}
 {"id": "NM_000540.3:c.1840+1G>A", "input_text": "NM_000540.3:c.1840+1G>A", "gold_reference": ["12345678"], "metadata": {"gene": "RYR1", "source": "synthetic_demo", "hard_case": "intronic"}}
 ```
 
@@ -2142,8 +2142,8 @@ git commit -m "feat(variant_retrieval): add regulatory rows, report template + r
 
 `examples/data/cached_retrieval.jsonl` (one line per seed RYR1 variant; PMIDs from a real cached run — placeholders until a live run refreshes them; the intronic case demonstrates `resolved: false`):
 ```json
-{"id": "NM_000540.3:c.1840C>T", "pmids": ["8477729", "10484775", "9497773"], "resolved": true, "notes": []}
-{"id": "NM_000540.3:c.7300G>A", "pmids": ["9333239"], "resolved": true, "notes": []}
+{"id": "NM_000540.3:c.1840C>T", "pmids": ["99000001", "99000002", "99000005"], "resolved": true, "notes": []}
+{"id": "NM_000540.3:c.7300G>A", "pmids": ["99000003"], "resolved": true, "notes": []}
 {"id": "NM_000540.3:c.1840+1G>A", "pmids": [], "resolved": false, "notes": ["no protein consequence — route to manual, keep in set"]}
 ```
 

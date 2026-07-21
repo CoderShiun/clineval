@@ -261,14 +261,16 @@ Or open `examples/hpo_extraction_demo.ipynb` in your own Jupyter/VS Code and run
 
 ```
 clineval/
-├── core/                 # task-agnostic engine (schema, dataset, metric registry, evaluator, report)
-│   └── ontology/         #   the only code that touches PyHPO (IC, similarity, alignment)
-├── tasks/hpo_extraction/ # Module A: metrics (Tier 1/2/3), extractor, adapters, dataset loader
-├── regulatory/           # metric → EU AI Act / IVDR / ISO 15189:2022 mapping
-├── templates/            # the Jinja report template
-└── cli.py                # the `clineval run` entry point
-datasets/                 # GSC+ download + convert script (data itself is git-ignored)
-examples/                 # bundled synthetic data, cached predictions, and the demo notebook
+├── core/                    # task-agnostic engine (schema, dataset, metric registry, evaluator, report/render)
+│   └── ontology/            #   the only code that touches PyHPO (IC, similarity, alignment)
+├── pipeline/                # variant_retrieval system-under-test: normalize + retrieve, API clients, cache, throttle
+├── tasks/hpo_extraction/    # Module A: metrics (Tier 1/2/3), extractor, adapters, dataset loader
+├── tasks/variant_retrieval/ # Phase 1: retrieval metric, retriever adapters, gold loaders, report
+├── regulatory/              # metric → EU AI Act / IVDR / ISO 15189:2022 mapping
+├── templates/               # the Jinja report templates
+└── cli.py                   # the `clineval run` and `clineval retrieval-eval` entry points
+datasets/                    # GSC+ download + HGMD gold builder (data itself is git-ignored)
+examples/                    # bundled synthetic data, cached predictions/retrieval, and the demo notebook
 tests/                    # the test suite
 reports/                  # generated reports (git-ignored)
 ```
@@ -293,6 +295,62 @@ reports/                  # generated reports (git-ignored)
 ClinEval is designed to run **fully on-prem**: no data leaves your machine on the default
 (cached) path, and `--live` talks only to a model server *you* run. Use **public data only** —
 **do not** put patient data / PHI into datasets, caches, or reports.
+
+---
+
+## 14. Variant literature retrieval (`retrieval-eval`)
+
+A second task, `variant_retrieval`, scores a **variant → primary-literature** retrieval
+pipeline against a known-answer benchmark — the validation harness for replacing HGMD's
+literature-curation function with an open, auditable pipeline over free public APIs
+(VariantValidator, myvariant.info, LitVar2, NCBI E-utilities). **Recall is the headline**
+(did it surface the known references?); precision is reported but contextual (sparse
+primary-only gold, no ranking in Phase 1).
+
+Offline demo — replays committed **synthetic** cached outputs; no network, no HGMD:
+```bash
+docker compose run --rm clineval uv run clineval retrieval-eval \
+    --dataset ryr1 --source cached --report reports/retrieval.md
+```
+
+```
+clineval retrieval-eval [OPTIONS]
+```
+
+| Option | Default | Meaning |
+|---|---|---|
+| `--dataset` | `ryr1` | `ryr1` (bundled synthetic demo), `hgmd` (built gold at `datasets/hgmd_gold/ryr1_gold.jsonl`), or a path to a gold JSONL. |
+| `--source` | `cached` | `cached` (replay committed pipeline outputs, offline), `live` (run the real pipeline), or `dataset` (score `system_output` already in the gold JSONL). |
+| `--cache` | `examples/data/cached_retrieval.jsonl` | Cached retrieval outputs to replay under `--source cached`. |
+| `--request-cache` | `.cache/requests.sqlite` | SQLite HTTP cache for `--source live` (speeds re-runs; git-ignored). |
+| `--genome-build` | `GRCh38` | Genome build used for normalization. |
+| `--report` | `reports/retrieval.md` | Where to write the Markdown report (parent dirs created). |
+
+The report leads with recall (macro + micro), frames precision as contextual, lists **missed
+evidence** (false-negative PMIDs) and **unresolved variants** (flagged, never silently
+dropped — e.g. an intronic variant with no protein consequence), and closes with the
+regulatory-evidence mapping. The Provenance line records what fits the source: `cache_hit_rate`
+on `--source cached` (a partial run also warns on the console about unmatched variants, whose
+scores are zero), and `genome_build` plus the pipeline's tool/DB versions on `--source live`.
+
+### Live pipeline
+`--source live` runs Stage 1 (normalize + expand) and Stage 2 (retrieve) against the free
+public APIs; it **never calls HGMD**. Set `NCBI_API_KEY` to raise NCBI rate limits (the key
+is sent with requests but never written to the cache key):
+```bash
+# Requires the HGMD gold built first (see "Benchmark gold" below).
+docker compose run --rm clineval uv run clineval retrieval-eval \
+    --dataset datasets/hgmd_gold/ryr1_gold.jsonl --source live --report reports/retrieval.md
+```
+
+### Benchmark gold (licence firewall)
+The real benchmark answer key is built from a **licensed local HGMD dump** by
+`datasets/build_hgmd_gold.py` into git-ignored `datasets/hgmd_gold/` — HGMD's curated paper
+selections are licensed and are **never committed or redistributed**. The bundled
+`--dataset ryr1` demo uses **synthetic** variant→PMID pairs (out-of-range placeholder PMIDs)
+purely so the offline demo and tests run with zero setup. See
+[`../datasets/README.md`](../datasets/README.md) and the design spec at
+`docs/superpowers/specs/2026-07-16-variant-literature-retrieval-design.md`.
 
 ---
 

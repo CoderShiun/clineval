@@ -79,7 +79,7 @@ transcript** (`NM_000540.3:c.1840C>T`).
   by its rsID, so the pipeline fetches the rsID too, to search under that name as well.
 
 ### PMID
-**PubMed ID** — the unique number of a scientific paper in PubMed (e.g. `8477729`). PMIDs are
+**PubMed ID** — the unique number of a scientific paper in PubMed (e.g. `12034512`). PMIDs are
 public identifiers. Our gold set is "variant → list of the *correct* PMIDs," and the pipeline's
 job is to return those PMIDs.
 

@@ -89,6 +89,39 @@ and `--similarity-method` (`lin`, `jc`, or `jaccard`). The `--relatedness-tau` d
 (0.3) is calibrated for `lin`; re-tune it if you switch similarity method, since the
 similarity scales differ.
 
+## Variant literature retrieval (Phase 1)
+
+A second task, `variant_retrieval`, evaluates a **variant → primary-literature** retrieval
+pipeline: given a genomic variant (HGVS, e.g. `NM_000540.3:c.1840C>T`), it normalizes and
+expands the variant, retrieves candidate PubMed references from free public APIs, and scores
+retrieval **recall** (did it surface the known references?) against a known-answer benchmark.
+This is the validation harness for replacing HGMD's literature-curation function with an open,
+auditable pipeline. Recall is the headline; precision is reported but read as contextual
+(sparse primary-only gold, no ranking yet).
+
+Offline demo — committed **synthetic** fixtures, no network, no HGMD:
+
+```bash
+docker compose run --rm clineval uv run clineval retrieval-eval \
+    --dataset ryr1 --source cached --report reports/retrieval.md
+```
+
+Live pipeline (needs network; set `NCBI_API_KEY` to raise NCBI rate limits) — add
+`--source live`. It calls only free public services (VariantValidator, myvariant.info,
+LitVar2, NCBI E-utilities) and **never calls HGMD**:
+
+```bash
+# Requires the HGMD gold built first (datasets/build_hgmd_gold.py; see note below).
+docker compose run --rm clineval uv run clineval retrieval-eval \
+    --dataset datasets/hgmd_gold/ryr1_gold.jsonl --source live --report reports/retrieval.md
+```
+
+The real benchmark gold is built from a licensed local HGMD dump by
+`datasets/build_hgmd_gold.py` into git-ignored `datasets/hgmd_gold/` — HGMD's curated paper
+selections are licensed and **never committed**; the bundled `--dataset ryr1` demo uses
+**synthetic** variant→PMID pairs. Full reference: [`docs/USAGE.md`](docs/USAGE.md) §14 and the
+design spec at `docs/superpowers/specs/2026-07-16-variant-literature-retrieval-design.md`.
+
 ## Development
 
 All development runs in the container — no host Python/uv install.
@@ -108,16 +141,20 @@ ClinEval separates a **generic evaluation core** from **pluggable tasks**:
 
 ```
 clineval/core/         schema, dataset loading, metric registry, evaluator,
-                        ontology utilities (IC, similarity), Markdown report renderer
+                        ontology utilities (IC, similarity), Markdown report/render
+clineval/pipeline/      variant-retrieval system-under-test: normalize + retrieve,
+                         public-API clients (VariantValidator, myvariant, LitVar2,
+                         E-utilities), request cache, throttling
 clineval/tasks/
     hpo_extraction/     Module A: adapters, extractors (cached + live), metrics,
                          dataset loaders — everything specific to HPO extraction
+    variant_retrieval/  Phase 1: retrieval metric, retriever adapters, gold loaders, report
     report_generation/  Module B seam — intentionally empty. A future task adds
                          faithfulness/hallucination metrics for generated clinical
                          reports here, reusing the same core schema, evaluator, and
                          metric registry, without touching Module A.
 clineval/regulatory/    the evidence-to-clause mapping table
-clineval/templates/     the Jinja2 report template
+clineval/templates/     the Jinja2 report templates
 ```
 
 Adding a new task means implementing a `DatasetLoader`, one or more `Metric`s registered
