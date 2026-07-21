@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import os
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -10,6 +11,7 @@ import openai
 import typer
 
 import clineval.tasks.hpo_extraction  # noqa: F401  (registers metrics on import)
+import clineval.tasks.variant_retrieval  # noqa: F401  (registers retrieval metric)
 from clineval.core.dataset import JSONLDatasetLoader
 from clineval.core.evaluator import evaluate
 from clineval.core.metric import EvalContext
@@ -21,6 +23,13 @@ from clineval.tasks.hpo_extraction.extractor import (
     CachedExtractor,
     DatasetExtractor,
     OpenAICompatibleExtractor,
+)
+from clineval.tasks.variant_retrieval.datasets import HgmdGoldLoader, RYR1BenchmarkLoader
+from clineval.tasks.variant_retrieval.report import render_retrieval_report
+from clineval.tasks.variant_retrieval.retriever import (
+    CachedRetriever,
+    DatasetRetriever,
+    PipelineRetriever,
 )
 
 app = typer.Typer(add_completion=False, help="ClinEval: evaluate clinical LLM outputs.")
@@ -174,3 +183,121 @@ def run(
     if hits is not None:
         summary += f"  cache hits: {hits}/{len(records)}"
     typer.echo(summary)
+
+
+def _live_transient_errors() -> type[BaseException]:
+    """The pipeline's transport-failure type (lazy import: offline sources never reach here)."""
+    from clineval.pipeline.clients.http import TransientHTTPError
+
+    return TransientHTTPError
+
+
+def _load_retrieval_dataset(dataset: str):
+    if dataset == "ryr1":
+        return RYR1BenchmarkLoader().load()
+    if dataset == "hgmd":
+        return HgmdGoldLoader().load()
+    return RYR1BenchmarkLoader(dataset).load()  # treat anything else as a path to a gold JSONL
+
+
+def _build_pipeline_retriever(genome_build: str, request_cache: str) -> PipelineRetriever:
+    """Wire the live Stage 1->2 pipeline over free public APIs (no HGMD)."""
+    from clineval.pipeline.cache import RequestCache
+    from clineval.pipeline.clients.eutils import EutilsClient
+    from clineval.pipeline.clients.http import HttpClient
+    from clineval.pipeline.clients.litvar import LitVarClient
+    from clineval.pipeline.clients.myvariant_client import MyVariantClient
+    from clineval.pipeline.clients.variantvalidator import VariantValidatorClient
+    from clineval.pipeline.normalize import normalize_and_expand
+    from clineval.pipeline.retrieve import retrieve
+    from clineval.pipeline.throttle import RateLimiter
+
+    http = HttpClient(cache=RequestCache(request_cache), limiter=RateLimiter(3.0))
+    vv, mv = VariantValidatorClient(http), MyVariantClient()
+    litvar = LitVarClient(http)
+    eutils = EutilsClient(http, api_key=os.environ.get("NCBI_API_KEY"))
+    return PipelineRetriever(
+        normalize_fn=lambda hgvs: normalize_and_expand(hgvs, genome_build, vv=vv, mv=mv),
+        retrieve_fn=lambda forms: retrieve(forms, litvar=litvar, eutils=eutils),
+    )
+
+
+@app.command("retrieval-eval")
+def retrieval_eval(
+    dataset: str = typer.Option("ryr1", help="'ryr1', 'hgmd', or a path to a gold JSONL."),
+    report: str = typer.Option("reports/retrieval.md", help="Output Markdown path."),
+    source: str = typer.Option(
+        "cached", help="'cached' (offline), 'live' (real pipeline), or 'dataset'."
+    ),
+    cache: str = typer.Option(
+        "examples/data/cached_retrieval.jsonl", help="Cached retrieval outputs (source=cached)."
+    ),
+    request_cache: str = typer.Option(
+        ".cache/requests.sqlite", help="SQLite request cache (source=live)."
+    ),
+    genome_build: str = typer.Option("GRCh38", help="Genome build for normalization."),
+) -> None:
+    """Run the variant retrieval evaluation and write a Markdown report."""
+    if source not in {"cached", "live", "dataset"}:
+        typer.echo("Error: --source must be cached, live, or dataset.", err=True)
+        raise typer.Exit(1)
+    try:
+        records = _load_retrieval_dataset(dataset)
+        if source == "cached":
+            retriever: object = CachedRetriever(cache)
+            model_label = "cached"
+        elif source == "dataset":
+            retriever = DatasetRetriever()
+            model_label = "dataset"
+        else:
+            retriever = _build_pipeline_retriever(genome_build, request_cache)
+            model_label = "live-pipeline"
+        for rec in records:
+            rec.system_output = retriever.extract(rec)
+    except (FileNotFoundError, ValueError) as exc:
+        typer.echo(f"Error: {exc}", err=True)
+        raise typer.Exit(1) from exc
+    except _live_transient_errors() as exc:
+        typer.echo(f"Error: live retrieval failed ({exc}). Check network / NCBI_API_KEY.", err=True)
+        raise typer.Exit(1) from exc
+
+    provenance: dict[str, str] = {}
+    if source == "cached":
+        hits = sum(1 for rec in records if retriever.covers(rec.id))
+        provenance["cache_hit_rate"] = f"{hits}/{len(records)}"
+        if hits < len(records):
+            typer.echo(
+                f"WARNING: {hits}/{len(records)} variants matched cache '{cache}' — "
+                "unmatched variants score zero. Check --dataset/--cache "
+                "alignment or use --source live.",
+                err=True,
+            )
+    elif source == "live":
+        provenance["genome_build"] = genome_build   # which build normalization used
+        # Lift the pipeline's tool/DB-version evidence snapshot from the records into the
+        # run-level provenance so the report actually renders what the regulatory table claims.
+        sources: dict[str, None] = {}
+        vvdb_version = ""
+        for rec in records:
+            snap = rec.metadata.get("provenance", {})
+            vvdb_version = snap.get("vvdb_version", "") or vvdb_version
+            sources.update(dict.fromkeys(snap.get("sources", [])))
+        if vvdb_version:
+            provenance["vvdb_version"] = vvdb_version
+        if sources:
+            provenance["sources"] = ",".join(sources)
+
+    result = evaluate(
+        "variant_retrieval",
+        records,
+        EvalContext(),   # the retrieval metric needs no ontology/config
+        dataset=dataset,
+        model=model_label,
+        timestamp=datetime.now(timezone.utc).isoformat(timespec="seconds"),
+        provenance=provenance,
+    )
+    output = render_retrieval_report(result)
+    out_path = Path(report)
+    out_path.parent.mkdir(parents=True, exist_ok=True)
+    out_path.write_text(output, encoding="utf-8")
+    typer.echo(f"Wrote {report}  (variants: {result.n_documents}, source: {model_label})")
