@@ -51,6 +51,21 @@ def test_retrieval_metric_micro_aggregates():
     assert agg["micro_precision"] == 0.75 and agg["micro_recall"] == 0.75 and agg["micro_f1"] == 0.75
 
 
+def test_retrieval_metric_excludes_degraded_variants_from_scores():
+    # A degraded variant (API failure / cache miss) is listed in details but NOT scored — its
+    # zero would be a retrieval artifact, not evidence, so it must not deflate the aggregates.
+    records = [
+        _rec("v1", ["1", "2"], ["1", "2"]),                    # clean, perfect
+        PredictionRecord(id="v2", input_text="v2", gold_reference=["3", "4"],
+                         system_output=[], metadata={"retrieval_status": "degraded"}),
+    ]
+    result = RetrievalMetric().compute(records, EvalContext())
+    assert result.details["degraded"] == ["v2"]
+    assert "v2" not in result.per_document                     # excluded from per-doc
+    assert result.aggregate["recall"] == 1.0                   # scored over v1 only, not 0.5
+    assert result.aggregate["micro_recall"] == 1.0
+
+
 def test_retrieval_metric_records_unresolved_variants():
     records = [_rec("v1", ["1"], ["1"]), _rec("v2", ["2"], [], resolved=False)]
     result = RetrievalMetric().compute(records, EvalContext())

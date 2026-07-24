@@ -6,17 +6,30 @@
 - **Provenance:** {{ provenance }}
 {% endif %}
 
-## Aggregate scores (recall is the headline)
+## Concordance with HGMD
 
-| Metric | Macro | Micro |
+> **What this measures — read before the numbers.** The gold set *is* HGMD's curated citation
+> list, so these are scores of **concordance with HGMD, not coverage of the true literature**.
+> Recall has a **hard ceiling at HGMD**: a correct paper HGMD did not list cannot raise it.
+> Precision charges every retrieved paper *outside* HGMD's list (which is broad — primary
+> **plus** additional **plus** extra references, not primary-only) as a false positive — and
+> some of those may be correct papers HGMD simply omitted. So neither number alone answers
+> "can we drop HGMD?"; they bound "how well does the free pipeline reproduce HGMD's bibliography."
+
+| Metric | Macro (mean over variants) | Micro (pooled over all PMIDs) |
 |---|---|---|
-| **Recall** | **{{ '%.3f'|format(agg.recall) }}** | {{ '%.3f'|format(agg.micro_recall) }} |
-| Precision (context) | {{ '%.3f'|format(agg.precision) }} | {{ '%.3f'|format(agg.micro_precision) }} |
+| **Recall** | **{{ '%.3f'|format(agg.recall) }}** | **{{ '%.3f'|format(agg.micro_recall) }}** |
+| Precision | {{ '%.3f'|format(agg.precision) }} | {{ '%.3f'|format(agg.micro_precision) }} |
 | F1 | {{ '%.3f'|format(agg.f1) }} | {{ '%.3f'|format(agg.micro_f1) }} |
 | Mean yield (papers/variant) | {{ '%.2f'|format(agg.mean_yield) }} | |
 
-> Precision is contextual in Phase 1: with a primary-references-only gold and no ranking, a
-> correct-but-non-primary paper is charged as a false positive. Read recall first.
+**Scored over {{ per_doc|length }} of {{ r.n_documents }} variant(s)** — {{ degraded|length }} with degraded/uncovered retrieval excluded (see Retrieval integrity below).
+
+> **Macro vs micro (both shown, neither is "the" number).** Macro weights every variant
+> equally, so it is dominated by the many single-citation variants; micro weights every gold
+> PMID equally, so it better reflects "what share of all known citations did we find." When a
+> dataset mixes easy single-paper variants with hard many-paper ones, the two diverge — compare
+> them rather than reading one in isolation.
 
 ## Per-variant breakdown
 
@@ -42,6 +55,20 @@ None — every gold reference was retrieved.
 {{ unresolved|join(', ') }}
 {% else %}
 None — all variants normalized to a protein consequence.
+{% endif %}
+
+## Retrieval integrity
+
+{% if degraded %}
+**{{ degraded|length }} variant(s) had DEGRADED retrieval** (API failure or cache miss) and were
+**excluded from the scores above** — their zero would be a retrieval artifact, not evidence that no
+literature exists. The aggregates therefore cover only the cleanly-retrieved variants; re-run these
+for a complete result:
+{% for vid in degraded %}
+- {{ vid }}
+{% endfor %}
+{% else %}
+All variants retrieved cleanly — no API failures or cache misses, so every score reflects a real retrieval attempt.
 {% endif %}
 
 ## Regulatory Evidence Mapping

@@ -185,13 +185,6 @@ def run(
     typer.echo(summary)
 
 
-def _live_transient_errors() -> type[BaseException]:
-    """The pipeline's transport-failure type (lazy import: offline sources never reach here)."""
-    from clineval.pipeline.clients.http import TransientHTTPError
-
-    return TransientHTTPError
-
-
 def _load_retrieval_dataset(dataset: str):
     if dataset == "ryr1":
         return RYR1BenchmarkLoader().load()
@@ -257,9 +250,9 @@ def retrieval_eval(
     except (FileNotFoundError, ValueError) as exc:
         typer.echo(f"Error: {exc}", err=True)
         raise typer.Exit(1) from exc
-    except _live_transient_errors() as exc:
-        typer.echo(f"Error: live retrieval failed ({exc}). Check network / NCBI_API_KEY.", err=True)
-        raise typer.Exit(1) from exc
+    # Note: a live per-variant API/normalization failure does NOT raise here — the pipeline
+    # marks that variant's retrieval "degraded" (excluded + surfaced below), so one bad
+    # variant never aborts the batch.
 
     provenance: dict[str, str] = {}
     if source == "cached":
@@ -286,6 +279,17 @@ def retrieval_eval(
             provenance["vvdb_version"] = vvdb_version
         if sources:
             provenance["sources"] = ",".join(sources)
+
+    # A variant whose retrieval was degraded (API failure) or uncovered (cache miss) scores
+    # zero, but that zero is NOT evidence of "no literature" — surface it, never hide it.
+    degraded = [r for r in records if r.metadata.get("retrieval_status", "ok") != "ok"]
+    if degraded:
+        provenance["degraded_variants"] = f"{len(degraded)}/{len(records)}"
+        typer.echo(
+            f"WARNING: {len(degraded)}/{len(records)} variant(s) had degraded retrieval "
+            "(API failure or cache miss); their empty results are flagged, not 'no evidence'.",
+            err=True,
+        )
 
     result = evaluate(
         "variant_retrieval",

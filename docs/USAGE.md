@@ -300,12 +300,19 @@ ClinEval is designed to run **fully on-prem**: no data leaves your machine on th
 
 ## 14. Variant literature retrieval (`retrieval-eval`)
 
+> **For the full picture — the goal, how the pipeline works, and (critically) how to read the
+> results without over-trusting them — see [`variant_retrieval_guide.md`](variant_retrieval_guide.md).**
+> This section is the CLI reference.
+
 A second task, `variant_retrieval`, scores a **variant → primary-literature** retrieval
 pipeline against a known-answer benchmark — the validation harness for replacing HGMD's
 literature-curation function with an open, auditable pipeline over free public APIs
-(VariantValidator, myvariant.info, LitVar2, NCBI E-utilities). **Recall is the headline**
-(did it surface the known references?); precision is reported but contextual (sparse
-primary-only gold, no ranking in Phase 1).
+(VariantValidator, myvariant.info, LitVar2, NCBI E-utilities). Because the gold *is* HGMD's
+curated citation list, the scores are **concordance with HGMD, not coverage of the true
+literature**: recall has a hard ceiling at HGMD, and precision charges any paper outside HGMD's
+(broad — primary + additional + extra) list as a false positive. The report shows macro **and**
+micro recall together — neither alone answers "can we drop HGMD?"; they bound how well the free
+pipeline reproduces HGMD's bibliography.
 
 Offline demo — replays committed **synthetic** cached outputs; no network, no HGMD:
 ```bash
@@ -326,10 +333,11 @@ clineval retrieval-eval [OPTIONS]
 | `--genome-build` | `GRCh38` | Genome build used for normalization. |
 | `--report` | `reports/retrieval.md` | Where to write the Markdown report (parent dirs created). |
 
-The report leads with recall (macro + micro), frames precision as contextual, lists **missed
-evidence** (false-negative PMIDs) and **unresolved variants** (flagged, never silently
-dropped — e.g. an intronic variant with no protein consequence), and closes with the
-regulatory-evidence mapping. The Provenance line records what fits the source: `cache_hit_rate`
+The report shows macro + micro recall together with the concordance caveat, lists **missed
+evidence** (false-negative PMIDs), **unresolved variants** (flagged, never silently dropped —
+e.g. an intronic variant with no protein consequence), and a **retrieval-integrity** section
+naming any variant whose retrieval was degraded (API failure / cache miss) so its zero is not
+misread as "no evidence"; it closes with the regulatory-evidence mapping. The Provenance line records what fits the source: `cache_hit_rate`
 on `--source cached` (a partial run also warns on the console about unmatched variants, whose
 scores are zero), and `genome_build` plus the pipeline's tool/DB versions on `--source live`.
 

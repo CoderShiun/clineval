@@ -1,6 +1,8 @@
 import json
 from pathlib import Path
 
+import pytest
+
 from clineval.pipeline.clients.http import HttpClient
 from clineval.pipeline.clients.litvar import LitVarClient, parse_litvar_pmids
 
@@ -58,15 +60,19 @@ def test_litvar_autocomplete_non_list_response_returns_empty():
     assert client.autocomplete("q") == []
 
 
-def test_litvar_publications_non_fatal_on_error():
+def test_litvar_publications_raises_on_error():
+    # The client is thin: transport failures propagate so Stage 2 can RECORD the
+    # degradation (a swallowed [] would be indistinguishable from "no papers").
     def boom(url, params, headers):
         raise ValueError("permanent 404")
 
-    assert LitVarClient(HttpClient(transport=boom)).publications("litvar@x##") == []
+    with pytest.raises(ValueError, match="404"):
+        LitVarClient(HttpClient(transport=boom)).publications("litvar@x##")
 
 
-def test_litvar_autocomplete_non_fatal_on_error():
+def test_litvar_autocomplete_raises_on_error():
     def boom(url, params, headers):
         raise ValueError("boom")
 
-    assert LitVarClient(HttpClient(transport=boom)).autocomplete("q") == []
+    with pytest.raises(ValueError, match="boom"):
+        LitVarClient(HttpClient(transport=boom)).autocomplete("q")

@@ -8,17 +8,16 @@ Flow confirmed in the Task-0 spike (the old ``/search/`` path is gone):
 
 A variant can have several ``_id`` (an rsID-keyed one and a gene-keyed one) with
 different PMID sets; Stage 2 unions across them for recall. This client provides the
-two primitives; both are non-fatal (return ``[]`` on failure).
+two primitives and RAISES on transport failure — Stage 2 (``retrieve``) decides what
+is non-fatal and records the failure, so an API outage is never silently indistinguishable
+from "this variant has no literature."
 """
 
 from __future__ import annotations
 
-import logging
 from urllib.parse import quote
 
 from clineval.pipeline.clients.http import HttpClient
-
-log = logging.getLogger(__name__)
 
 LITVAR2_BASE = "https://www.ncbi.nlm.nih.gov/research/litvar2-api"
 
@@ -42,21 +41,17 @@ class LitVarClient:
         self._base = base_url
 
     def autocomplete(self, query: str) -> list[dict]:
-        """Resolve a free-text query to LitVar variant candidates; [] on failure."""
-        try:
-            raw = self._http.get_json(self._base, "/variant/autocomplete/", params={"query": query})
-        except Exception as exc:
-            log.warning("litvar autocomplete failed for %r: %s", query, exc)
-            return []
+        """Resolve a free-text query to LitVar variant candidates (raises on transport failure).
+
+        A non-list (error) body is treated as no candidates ([]), but a transport
+        exception propagates so the caller can record the degradation.
+        """
+        raw = self._http.get_json(self._base, "/variant/autocomplete/", params={"query": query})
         return raw if isinstance(raw, list) else []
 
     def publications(self, litvar_id: str) -> list[str]:
-        """Return the deduped PMIDs for a LitVar variant id; [] on failure."""
-        try:
-            raw = self._http.get_json(
-                self._base, f"/variant/get/{quote(litvar_id, safe='')}/publications"
-            )
-        except Exception as exc:
-            log.warning("litvar publications failed for %s: %s", litvar_id, exc)
-            return []
+        """Return the deduped PMIDs for a LitVar variant id (raises on transport failure)."""
+        raw = self._http.get_json(
+            self._base, f"/variant/get/{quote(litvar_id, safe='')}/publications"
+        )
         return parse_litvar_pmids(raw)

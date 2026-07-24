@@ -55,6 +55,7 @@ def test_missense_resolves_and_expands():
     assert out.xrefs["clinvar"] == {"sig": "Pathogenic"}
     assert out.xrefs["gnomad"] == {"af": 0.0}
     assert out.provenance.vvdb_version == "vvdb_2025_3"
+    assert set(out.provenance.sources) == {"variantvalidator", "myvariant"}   # both ran
     assert vv.called == ("NM_000540.3:c.1840C>T", "GRCh38")
 
 
@@ -80,12 +81,14 @@ def test_protein_only_hard_case_flagged_not_dropped():
 
 
 def test_empty_vv_cform_still_keeps_input_and_flags():
-    # VV returned no hit (c_form empty) -> the input HGVS is still kept, and with no
-    # protein consequence the variant is flagged (not dropped).
+    # VV returned no hit (empty parse: no gene, no c_form) -> input HGVS kept, and flagged as a
+    # NORMALIZATION FAILURE (degraded downstream), NOT mislabeled a splice/intronic "route to
+    # manual" biology case and NOT scored as a real zero.
     out = normalize_and_expand("NM_X:c.1A>T", vv=_FakeVV(VVParsed()), mv=_FakeMV(rsid=None))
     assert out.forms == ["NM_X:c.1A>T"]           # only the input; empty c_form not added
-    assert out.resolved is False
-    assert any("manual" in n.lower() for n in out.notes)
+    assert out.resolved is False and out.normalization_failed is True
+    assert any("no mappable variant" in n.lower() for n in out.notes)
+    assert not any("route to manual" in n.lower() for n in out.notes)
 
 
 def test_missing_build_coords_skips_myvariant_gracefully():
@@ -105,6 +108,21 @@ def test_unknown_build_skips_rather_than_guessing_assembly():
     mv = _FakeMV()
     out = normalize_and_expand("NM_X:c.1A>T", "t2t", vv=_FakeVV(parsed), mv=mv)
     assert mv.calls == [] and out.xrefs["rsid"] is None
+    assert out.provenance.sources == ["variantvalidator"]        # myvariant skipped -> not claimed
+
+
+def test_variantvalidator_failure_is_non_fatal_at_stage1():
+    # A VV outage on one variant must not crash the batch: keep the variant (flag-don't-drop),
+    # note the failure, and skip expansion.
+    class _BoomVV:
+        def fetch(self, hgvs, build="GRCh38"):
+            raise RuntimeError("VV 500")
+
+    out = normalize_and_expand("NM_000540.3:c.1840C>T", vv=_BoomVV(), mv=_FakeMV())
+    assert out.resolved is False
+    assert out.normalization_failed is True                       # -> Stage 2 marks it degraded
+    assert "NM_000540.3:c.1840C>T" in out.forms                   # kept, not dropped
+    assert any("variantvalidator failed" in n.lower() for n in out.notes)
 
 
 def test_myvariant_exception_is_caught_at_stage1():
@@ -115,3 +133,4 @@ def test_myvariant_exception_is_caught_at_stage1():
     out = normalize_and_expand("NM_000540.3:c.1840C>T", vv=_FakeVV(_missense_parsed()), mv=_RaisingMV())
     assert out.resolved is True and out.xrefs["rsid"] is None     # still normalizes
     assert any("myvariant" in n.lower() for n in out.notes)
+    assert out.provenance.sources == ["variantvalidator"]        # myvariant failed -> not claimed

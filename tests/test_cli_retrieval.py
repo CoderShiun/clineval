@@ -100,7 +100,11 @@ def test_retrieval_eval_partial_cache_warns(tmp_path):
     ])
     assert result.exit_code == 0, result.output
     assert "1/3 variants matched cache" in result.output
-    assert "cache_hit_rate=1/3" in out.read_text(encoding="utf-8")
+    md = out.read_text(encoding="utf-8")
+    assert "cache_hit_rate=1/3" in md
+    # The 2 uncovered variants are flagged as degraded (their zero != "no evidence").
+    assert "2/3 variant(s) had degraded retrieval" in result.output
+    assert "degraded_variants=2/3" in md
 
 
 def test_retrieval_eval_live_source(tmp_path, monkeypatch):
@@ -149,21 +153,25 @@ def test_retrieval_eval_live_lifts_tool_provenance(tmp_path, monkeypatch):
     assert "sources=variantvalidator,litvar2" in md
 
 
-def test_retrieval_eval_live_network_failure_is_friendly(tmp_path, monkeypatch):
-    from clineval.pipeline.clients.http import TransientHTTPError
-
-    class BoomRetriever:
+def test_retrieval_eval_live_degraded_variant_is_surfaced(tmp_path, monkeypatch):
+    # A live per-variant API/normalization failure does NOT abort the batch: the variant is
+    # marked degraded, the CLI warns, and the report surfaces it (exit 0) — never a silent zero.
+    class DegradedRetriever:
         mode = "live"
 
         def extract(self, rec):
-            raise TransientHTTPError("connection reset")
+            rec.metadata["retrieval_status"] = "degraded"
+            rec.metadata["notes"] = ["litvar autocomplete failed"]
+            return []
 
-    monkeypatch.setattr(clineval.cli, "_build_pipeline_retriever", lambda gb, rc: BoomRetriever())
+    monkeypatch.setattr(clineval.cli, "_build_pipeline_retriever", lambda gb, rc: DegradedRetriever())
+    out = tmp_path / "r.md"
     result = runner.invoke(app, [
-        "retrieval-eval", "--dataset", "ryr1", "--source", "live", "--report", str(tmp_path / "r.md"),
+        "retrieval-eval", "--dataset", "ryr1", "--source", "live", "--report", str(out),
     ])
-    assert result.exit_code == 1
-    assert "live retrieval failed" in result.output
+    assert result.exit_code == 0, result.output
+    assert "had degraded retrieval" in result.output
+    assert "DEGRADED retrieval" in out.read_text(encoding="utf-8")
 
 
 def test_build_pipeline_retriever_wires_live_seams(tmp_path, monkeypatch):

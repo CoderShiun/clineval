@@ -56,7 +56,7 @@ class EvaluationResult:
     # non-ontology tasks leave it None and use ``provenance`` instead.
     alignment: OntologyAlignment | None = None
     records: list[PredictionRecord] = field(default_factory=list)
-    # Task-agnostic run provenance (tool/DB versions, cache stats, ...). The
+    # Task-agnostic run provenance (tool/DB versions, sources, cache-hit rate, ...). The
     # retrieval-side analog of OntologyAlignment for the IVDR evidence snapshot.
     provenance: dict[str, Any] = field(default_factory=dict)
 

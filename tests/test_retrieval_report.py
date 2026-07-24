@@ -31,7 +31,8 @@ def _result(missed=None, unresolved=None):
 def test_report_has_key_sections():
     md = render_retrieval_report(_result())
     assert "# ClinEval — Variant Literature Retrieval Report" in md
-    assert "Recall" in md and "**0.750**" in md        # bolded macro-recall headline
+    # Macro AND micro recall both shown and both bolded (equal prominence, not "the" number).
+    assert md.count("**0.750**") >= 2
     assert "Missed evidence" in md and "v2" in md      # missed-evidence detail
     assert "Unresolved variants" in md                 # flag-not-drop section
     assert "vvdb_2025_3" in md                          # provenance snapshot
@@ -39,10 +40,22 @@ def test_report_has_key_sections():
     assert "not legal" in md.lower()                   # disclaimer
     # Full per-variant row pins column order (a precision<->recall swap would fail).
     assert "| v2 | 2 | 1 | 1 | 1 | 0.50 | 1.00 |" in md
-    # Honest precision framing is a requirement, not decoration.
-    assert "Precision is contextual" in md
+    # Honest framing is a requirement, not decoration: concordance-not-coverage + the ceiling.
+    assert "concordance with hgmd" in md.lower()
+    assert "hard ceiling" in md.lower()
+    assert "All variants retrieved cleanly" in md      # retrieval-integrity section (none degraded)
     # The provenance-present path must keep a blank line before the next heading (M1 fix).
-    assert "cache_hit_rate=2/2\n\n## Aggregate scores" in md
+    assert "cache_hit_rate=2/2\n\n## Concordance with HGMD" in md
+
+
+def test_report_flags_degraded_retrieval():
+    # A variant excluded from scoring for degraded retrieval must be surfaced (with the
+    # exclusion stated), not read as "no literature exists".
+    result = _result()
+    result.metrics[0].details["degraded"] = ["v2"]
+    md = render_retrieval_report(result)
+    assert "DEGRADED retrieval" in md and "- v2" in md
+    assert "excluded from the scores above" in md
 
 
 def test_report_handles_clean_run_with_no_gaps():
@@ -58,7 +71,7 @@ def test_report_renders_without_provenance():
     result.provenance = {}
     md = render_retrieval_report(result)
     assert "**Provenance:**" not in md
-    assert "\n\n## Aggregate scores" in md
+    assert "\n\n## Concordance with HGMD" in md
 
 
 def test_report_renders_from_real_metric_output():

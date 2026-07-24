@@ -25,6 +25,15 @@ def test_ryr1_loader_coerces_pmids_to_str(tmp_path):
     assert records[0].gold_reference == ["123", "456"]   # numeric PMIDs -> strings
 
 
+def test_ryr1_loader_rejects_empty_gold_reference(tmp_path):
+    # A retrieval benchmark variant must have >=1 known PMID; an empty gold would score a
+    # spurious 1.0, so it's rejected loudly rather than silently averaged in.
+    p = tmp_path / "g.jsonl"
+    p.write_text('{"id": "v", "gold_reference": [], "metadata": {}}\n', encoding="utf-8")
+    with pytest.raises(ValueError, match="empty gold_reference"):
+        RYR1BenchmarkLoader(str(p)).load()
+
+
 def test_hgmd_loader_missing_file_is_clear():
     with pytest.raises(FileNotFoundError) as e:
         HgmdGoldLoader(path="datasets/hgmd_gold/does_not_exist.jsonl").load()

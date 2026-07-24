@@ -3,6 +3,23 @@ import pytest
 from clineval.core.dataset import JSONLDatasetLoader
 
 
+@pytest.mark.parametrize("bad", ["null", '{"x": 1}', "1.5", "true"])
+def test_jsonl_loader_rejects_non_scalar_gold_elements(tmp_path, bad):
+    # A null/object/float/bool in gold_reference must fail loudly, not become a phantom
+    # "None"/"{'x': 1}" PMID that silently deflates recall.
+    p = tmp_path / "d.jsonl"
+    p.write_text('{"id": "v", "gold_reference": ["1", ' + bad + "]}\n", encoding="utf-8")
+    with pytest.raises(ValueError, match="non-string/int"):
+        JSONLDatasetLoader(str(p)).load()
+
+
+def test_jsonl_loader_rejects_non_scalar_system_output_elements(tmp_path):
+    p = tmp_path / "d.jsonl"
+    p.write_text('{"id": "v", "gold_reference": ["1"], "system_output": [null]}\n', encoding="utf-8")
+    with pytest.raises(ValueError, match="non-string/int"):
+        JSONLDatasetLoader(str(p)).load()
+
+
 def test_jsonl_loader_reads_records(tmp_path):
     p = tmp_path / "data.jsonl"
     p.write_text(

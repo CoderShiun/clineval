@@ -94,10 +94,11 @@ similarity scales differ.
 A second task, `variant_retrieval`, evaluates a **variant → primary-literature** retrieval
 pipeline: given a genomic variant (HGVS, e.g. `NM_000540.3:c.1840C>T`), it normalizes and
 expands the variant, retrieves candidate PubMed references from free public APIs, and scores
-retrieval **recall** (did it surface the known references?) against a known-answer benchmark.
-This is the validation harness for replacing HGMD's literature-curation function with an open,
-auditable pipeline. Recall is the headline; precision is reported but read as contextual
-(sparse primary-only gold, no ranking yet).
+retrieval **recall** against a known-answer benchmark. This is the validation harness for
+replacing HGMD's literature-curation function with an open, auditable pipeline. Because the
+gold *is* HGMD's curated citation list, these are scores of **concordance with HGMD, not
+coverage of the true literature** — recall has a hard ceiling at HGMD, and the report shows
+macro **and** micro recall together (neither alone is "the" number) and reads precision with care.
 
 Offline demo — committed **synthetic** fixtures, no network, no HGMD:
 
@@ -119,8 +120,9 @@ docker compose run --rm clineval uv run clineval retrieval-eval \
 The real benchmark gold is built from a licensed local HGMD dump by
 `datasets/build_hgmd_gold.py` into git-ignored `datasets/hgmd_gold/` — HGMD's curated paper
 selections are licensed and **never committed**; the bundled `--dataset ryr1` demo uses
-**synthetic** variant→PMID pairs. Full reference: [`docs/USAGE.md`](docs/USAGE.md) §14 and the
-design spec at `docs/superpowers/specs/2026-07-16-variant-literature-retrieval-design.md`.
+**synthetic** variant→PMID pairs. **Full guide — goal, how it works, and how to read the results
+correctly: [`docs/variant_retrieval_guide.md`](docs/variant_retrieval_guide.md)** (CLI reference in
+[`docs/USAGE.md`](docs/USAGE.md) §14).
 
 ## Development
 

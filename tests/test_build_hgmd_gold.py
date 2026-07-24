@@ -56,6 +56,20 @@ def test_row_to_record_handles_no_primary():
     assert rec["gold_reference"] == ["99000031"]
 
 
+def test_coverage_flags_genes_that_matched_zero_variants():
+    counts, zero = build_hgmd_gold._coverage([("RYR1", 1505)], ["RYR1", "CACNA1S"])
+    assert counts == {"RYR1": 1505}
+    assert zero == ["CACNA1S"]   # requested but matched zero rows -> surfaced, not silently dropped
+
+
+def test_sha256_file_digests_written_bytes(tmp_path):
+    import hashlib
+
+    p = tmp_path / "g.jsonl"
+    p.write_text("hello", encoding="utf-8")
+    assert build_hgmd_gold._sha256_file(p) == hashlib.sha256(b"hello").hexdigest()
+
+
 def test_fetch_gold_records_uses_cursor():
     class _FakeCursor:
         def __init__(self, rows):

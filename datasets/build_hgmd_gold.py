@@ -47,6 +47,7 @@ USAGE (baked image, verified)
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 import sys
 from datetime import datetime, timezone
@@ -82,7 +83,8 @@ SELECT b.variant_hgvs,
        array_agg(DISTINCT b.acc_num ORDER BY b.acc_num)                         AS acc_nums,
        array_agg(DISTINCT b.tag ORDER BY b.tag)                                 AS tags,
        array_agg(DISTINCT p.pmid ORDER BY p.pmid)                               AS gold_pmids,
-       array_agg(DISTINCT b.primary_pmid) FILTER (WHERE b.primary_pmid ~ '^[0-9]+$') AS primary_pmids
+       array_agg(DISTINCT b.primary_pmid ORDER BY b.primary_pmid)
+           FILTER (WHERE b.primary_pmid ~ '^[0-9]+$')                           AS primary_pmids
 FROM base b JOIN pm p ON p.acc_num = b.acc_num
 GROUP BY b.variant_hgvs, b.gene
 ORDER BY b.gene, b.variant_hgvs;
@@ -96,6 +98,30 @@ FROM allmut
 WHERE gene = ANY(%(genes)s) AND tag = ANY(%(tags)s)
   AND btrim(refseq) NOT IN ('', 'NULL') AND btrim(hgvs) NOT IN ('', 'NULL');
 """
+
+# Per-gene in-scope variant counts, so a requested gene that matched ZERO rows (an alias/
+# case mismatch against HGMD's `gene` column) is visible rather than silently omitting a
+# whole gene from the benchmark denominator.
+_PER_GENE_COUNT_QUERY = """
+SELECT gene, count(DISTINCT (refseq || ':c.' || hgvs))
+FROM allmut
+WHERE gene = ANY(%(genes)s) AND tag = ANY(%(tags)s)
+  AND btrim(refseq) NOT IN ('', 'NULL') AND btrim(hgvs) NOT IN ('', 'NULL')
+GROUP BY gene;
+"""
+
+
+def _sha256_file(path: Path) -> str:
+    """SHA-256 of the written gold file — a content digest for the frozen-snapshot audit trail,
+    so a report claiming a release can be checked against the exact bytes it was scored on."""
+    return hashlib.sha256(path.read_bytes()).hexdigest()
+
+
+def _coverage(per_gene_rows, genes: list[str]) -> tuple[dict, list[str]]:
+    """Per-gene variant counts + the requested genes that matched ZERO rows (alias/case miss)."""
+    counts = {gene: int(n) for gene, n in per_gene_rows}
+    zero = [g for g in genes if counts.get(g, 0) == 0]
+    return counts, zero
 
 
 def _row_to_record(variant_hgvs, gene, acc_nums, tags, gold_pmids, primary_pmids) -> dict:
@@ -153,7 +179,11 @@ def main(argv: list[str] | None = None) -> None:
     ap.add_argument("--tags", default="DM,DM?", help="HGMD tags to include (default: DM,DM?).")
     ap.add_argument("--out", default="datasets/hgmd_gold/gold.jsonl", help="Output JSONL path.")
     ap.add_argument("--dsn", default=None, help="libpq DSN; omit to use PG* env vars.")
-    ap.add_argument("--hgmd-release", default="", help="HGMD release label to stamp (e.g. 2026.2).")
+    ap.add_argument(
+        "--hgmd-release", required=True,
+        help="HGMD release label to stamp into the snapshot (REQUIRED, e.g. 2026.2). A snapshot "
+        "with no release label can't be audited or safely compared, so it is refused.",
+    )
     args = ap.parse_args(argv)
 
     genes = _read_genes(args)
@@ -163,6 +193,10 @@ def main(argv: list[str] | None = None) -> None:
         records = fetch_gold_records(cur, genes, tags)
         cur.execute(_BASE_COUNT_QUERY, {"genes": genes, "tags": tags})
         base_count = cur.fetchone()[0] or 0
+        cur.execute(_PER_GENE_COUNT_QUERY, {"genes": genes, "tags": tags})
+        per_gene_counts, genes_with_zero = _coverage(cur.fetchall(), genes)
+        cur.execute("SELECT version()")
+        db_version = cur.fetchone()[0]
         try:
             cur.execute(
                 "SELECT max(new_date) FROM allmut WHERE gene = ANY(%(genes)s)", {"genes": genes}
@@ -183,10 +217,14 @@ def main(argv: list[str] | None = None) -> None:
     meta = {
         "built_at": datetime.now(timezone.utc).isoformat(timespec="seconds"),
         "hgmd_release": args.hgmd_release,
+        "db_version": db_version,                       # actual server version (audit)
+        "gold_sha256": _sha256_file(out_path),          # content digest of the frozen snapshot
         "genes": genes,
         "tags": tags,
         "n_variants": len(records),
         "n_distinct_pmids": len(distinct_pmids),
+        "per_gene_variants": per_gene_counts,           # per-gene coverage (panel completeness)
+        "genes_with_zero_variants": genes_with_zero,    # alias/case misses — NOT silently dropped
         "variants_with_no_pmid_excluded": int(no_pmid),
         "max_new_date": str(max_new_date) if max_new_date else None,
         "note": "Frozen HGMD-derived benchmark snapshot. Internal/licensed — do not redistribute.",
@@ -195,10 +233,15 @@ def main(argv: list[str] | None = None) -> None:
         json.dumps(meta, indent=2, ensure_ascii=False), encoding="utf-8"
     )
 
+    zero_warn = (
+        f"\n  WARNING: {len(genes_with_zero)} requested gene(s) matched ZERO variants "
+        f"(alias/case mismatch?): {', '.join(genes_with_zero)}"
+        if genes_with_zero else ""
+    )
     print(
         f"Wrote {out_path}  ({len(records)} variants, {len(distinct_pmids)} distinct PMIDs, "
         f"tags={tags})\n  {no_pmid} in-scope variant(s) had no citable PMID and were excluded "
-        f"(reported in {out_path.name}.meta.json).",
+        f"(reported in {out_path.name}.meta.json).{zero_warn}",
         file=sys.stderr,
     )
 

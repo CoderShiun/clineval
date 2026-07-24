@@ -8,6 +8,21 @@ from abc import ABC, abstractmethod
 from clineval.core.schema import PredictionRecord
 
 
+def _validate_id_list(values: list, field: str, path: str, n: int, rid: str) -> None:
+    """Every element of an id list (gold_reference/system_output) must be a string or int.
+
+    Rejects None/objects/floats/bools loudly — otherwise a downstream ``str(p)`` would
+    silently launder them into phantom ids like ``"None"`` that can never be matched,
+    deflating recall and corrupting the gold with no error.
+    """
+    for elem in values:
+        if not (isinstance(elem, str) or (isinstance(elem, int) and not isinstance(elem, bool))):
+            raise ValueError(
+                f"{path} line {n}: record {rid!r} field {field!r} contains a non-string/int "
+                f"element {elem!r} (type {type(elem).__name__}); ids must be strings or integers"
+            )
+
+
 class DatasetLoader(ABC):
     """A dataset loader yields PredictionRecords for evaluation."""
 
@@ -53,11 +68,19 @@ class JSONLDatasetLoader(DatasetLoader):
                         "'gold_reference' must be a list, got "
                         f"{type(obj['gold_reference']).__name__}"
                     )
+                _validate_id_list(
+                    obj["gold_reference"], "gold_reference", self.path, n, str(obj.get("id", "?"))
+                )
                 if "system_output" in obj and not isinstance(obj["system_output"], list):
                     raise ValueError(
                         f"{self.path} line {n}: record {obj.get('id', '?')!r} field "
                         "'system_output' must be a list, got "
                         f"{type(obj['system_output']).__name__}"
+                    )
+                if "system_output" in obj and isinstance(obj["system_output"], list):
+                    _validate_id_list(
+                        obj["system_output"], "system_output", self.path, n,
+                        str(obj.get("id", "?")),
                     )
                 if "metadata" in obj and not isinstance(obj["metadata"], dict):
                     raise ValueError(

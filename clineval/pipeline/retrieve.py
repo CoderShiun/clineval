@@ -20,10 +20,24 @@ if TYPE_CHECKING:
 
 
 def _autocomplete_queries(forms: VariantForms) -> set[str]:
-    """Gene + each bare 'p.' protein form, e.g. 'RYR1 p.R614C' (LitVar autocomplete)."""
+    """Gene + each protein / cDNA / rsID form (accession stripped) for LitVar autocomplete,
+    e.g. 'RYR1 p.R614C', 'RYR1 c.1840+1G>A', 'RYR1 rs118192172'.
+
+    The cDNA/rsID queries give NON-missense variants (splice/intronic/indel — no protein form)
+    a gene-keyed retrieval path they would otherwise lack entirely. Production forms are
+    accession-qualified (``NM_..:c.``, ``NP_..:p.``), so the accession is stripped to the bare
+    c./p. core (the same normalization ``_protein_core`` applies on the gate side) — otherwise
+    ``startswith('c.')`` would never fire on a real form. The _is_match gate still filters every
+    candidate, so broadening the queries can only add genuine matches, never collisions.
+    """
     if not forms.gene:
         return set()
-    return {f"{forms.gene} {f}" for f in forms.forms if f.startswith("p.") and "(" not in f}
+    return {
+        f"{forms.gene} {f.split(':', 1)[-1]}"       # strip transcript/genomic accession
+        for f in forms.forms
+        if "(" not in f
+        and (f.split(":", 1)[-1].startswith(("p.", "c.")) or f.startswith("rs"))
+    }
 
 
 def _protein_core(s: str) -> str:
@@ -58,30 +72,45 @@ def retrieve(forms: VariantForms, *, litvar: LitVarClient, eutils: EutilsClient)
     """Retrieve the deduplicated PMID union + per-paper metadata for one variant."""
     notes: list[str] = []
     matched_ids: dict[str, str] = {}   # litvar_id -> the form/query that surfaced it
+    litvar_ok = False                  # at least one LitVar call succeeded
+    litvar_failed = False              # at least one LitVar call raised (retrieval degraded)
 
     rsid = forms.xrefs.get("rsid")
     if rsid:
         matched_ids[f"litvar@{rsid}##"] = rsid   # trusted, coordinate-derived rsID id
 
     for query in sorted(_autocomplete_queries(forms)):   # sorted -> reproducible provenance
-        for cand in litvar.autocomplete(query):
+        try:
+            cands = litvar.autocomplete(query)
+        except Exception as exc:   # non-fatal, but RECORDED — never a silent zero
+            notes.append(f"litvar autocomplete failed for {query!r}: {exc}")
+            litvar_failed = True
+            continue
+        litvar_ok = True
+        for cand in cands:
             if _is_match(cand, forms) and cand.get("_id"):
                 matched_ids.setdefault(cand["_id"], query)
 
     matched_pmid: dict[str, str] = {}   # pmid -> the form/query that first surfaced it
     for litvar_id, matched_form in matched_ids.items():
-        for pmid in litvar.publications(litvar_id):
+        try:
+            pubs = litvar.publications(litvar_id)
+        except Exception as exc:   # non-fatal, but RECORDED
+            notes.append(f"litvar publications failed for {litvar_id}: {exc}")
+            litvar_failed = True
+            continue
+        litvar_ok = True
+        for pmid in pubs:
             matched_pmid.setdefault(pmid, matched_form)
 
     pmids = list(matched_pmid)
     meta: dict[str, dict] = {}
-    eutils_used = False
     if pmids:
         try:
             meta = eutils.summaries(pmids)
-            eutils_used = True
         except Exception as exc:  # metadata is best-effort: keep the PMIDs, note the failure
             notes.append(f"esummary metadata fetch failed: {exc}")
+    eutils_used = bool(meta)   # claim eutils only if it actually returned metadata
 
     papers = [
         PaperRef(
@@ -93,10 +122,20 @@ def retrieve(forms: VariantForms, *, litvar: LitVarClient, eutils: EutilsClient)
         )
         for pmid in pmids
     ]
+    sources: list[str] = []
+    if litvar_ok:                    # only claim a source that actually returned data
+        sources.append("litvar2")
+    if eutils_used:
+        sources.append("eutils")
     prov = PipelineProvenance(
         vv_version=forms.provenance.vv_version,
         vvdb_version=forms.provenance.vvdb_version,
         vvta_version=forms.provenance.vvta_version,
-        sources=["litvar2", "eutils"] if eutils_used else ["litvar2"],
+        sources=sources,
     )
-    return RetrievalResult(variant=forms.input, pmids=pmids, papers=papers, provenance=prov, notes=notes)
+    # Degraded if a LitVar call failed OR Stage 1 itself failed (a VV outage leaves no gene/rsID,
+    # so no LitVar call is even attempted — its empty result must not be scored as a real zero).
+    status = "degraded" if (litvar_failed or forms.normalization_failed) else "ok"
+    return RetrievalResult(
+        variant=forms.input, pmids=pmids, papers=papers, provenance=prov, notes=notes, status=status
+    )

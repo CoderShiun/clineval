@@ -1,15 +1,12 @@
-"""myvariant.info wrapper: backfill rsID + pull ClinVar/gnomAD xrefs (non-fatal).
+"""myvariant.info wrapper: backfill rsID + pull ClinVar/gnomAD xrefs.
 
 Stage 1 uses this to add the rsID (critical for LitVar retrieval) and to carry
-ClinVar/gnomAD cross-references for reuse downstream. Any failure is logged and
-degrades to all-None rather than aborting normalization.
+ClinVar/gnomAD cross-references for reuse downstream. It RAISES on transport failure;
+Stage 1 (``normalize_and_expand``) catches and notes it, so "myvariant unavailable"
+is recorded distinctly from "myvariant returned no rsID" (a successful all-None lookup).
 """
 
 from __future__ import annotations
-
-import logging
-
-log = logging.getLogger(__name__)
 
 _FIELDS = ["dbsnp.rsid", "clinvar", "gnomad_genome"]
 
@@ -20,11 +17,16 @@ class MyVariantClient:
             import myvariant
 
             mv = myvariant.MyVariantInfo()
-            mv.set_caching()  # local persistence = free caching
+            try:
+                mv.set_caching()  # local persistence = free caching (best-effort)
+            except Exception:
+                # Caching needs optional biothings deps (anysqlite/hishel). If absent, run
+                # UNCACHED rather than crash the whole live run — correctness is unaffected.
+                pass
         self._mv = mv
 
     def lookup(self, hgvs: str, assembly: str | None = None) -> dict:
-        """Return ``{rsid, clinvar, gnomad}``; all-None (logged) if the lookup fails.
+        """Return ``{rsid, clinvar, gnomad}`` (rsid None if not found); raises on failure.
 
         Pass ``assembly`` ("hg38"/"hg19") when querying by genomic (``chr:g.``) coords
         so myvariant resolves against the right build; omit it for rsID queries.
@@ -32,11 +34,7 @@ class MyVariantClient:
         kwargs: dict = {"fields": _FIELDS}
         if assembly:
             kwargs["assembly"] = assembly
-        try:
-            res = self._mv.getvariant(hgvs, **kwargs) or {}
-        except Exception as exc:  # non-fatal: log + return empties
-            log.warning("myvariant lookup failed for %s: %s", hgvs, exc)
-            return {"rsid": None, "clinvar": None, "gnomad": None}
+        res = self._mv.getvariant(hgvs, **kwargs) or {}
         return {
             "rsid": (res.get("dbsnp") or {}).get("rsid"),
             "clinvar": res.get("clinvar"),

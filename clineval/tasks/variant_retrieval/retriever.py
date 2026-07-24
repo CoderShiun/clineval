@@ -21,7 +21,9 @@ class DatasetRetriever:
     mode = "dataset"
 
     def extract(self, record: PredictionRecord) -> list[str]:
-        return list(record.system_output)
+        # Coerce to str (like the cache/live paths) so integer PMIDs can't silently
+        # mismatch the string gold and deflate recall.
+        return [str(p) for p in record.system_output]
 
 
 class CachedRetriever:
@@ -49,11 +51,16 @@ class CachedRetriever:
         return record_id in self._by_id
 
     def extract(self, record: PredictionRecord) -> list[str]:
-        obj = self._by_id.get(record.id, {})
+        obj = self._by_id.get(record.id)
+        if obj is None:
+            # A cache miss is NOT "no papers" — flag it so it's distinguishable in the report.
+            record.metadata["retrieval_status"] = "cache_miss"
+            return []
         if "resolved" in obj:
             record.metadata["resolved"] = obj["resolved"]
         if "notes" in obj:
             record.metadata["notes"] = list(obj["notes"])   # copy, don't alias the cache's list
+        record.metadata["retrieval_status"] = str(obj.get("status", "ok"))
         return [str(p) for p in obj.get("pmids", [])]
 
 
@@ -76,6 +83,8 @@ class PipelineRetriever:
         record.metadata["notes"] = list(forms.notes)
         result = self._retrieve(forms)
         record.metadata["notes"].extend(result.notes)
+        # "ok" | "degraded" (a LitVar API failure or a Stage-1 normalization failure)
+        record.metadata["retrieval_status"] = result.status
         # Evidence snapshot: the retrieval-side provenance (versions + [litvar2, eutils])
         # unioned with the Stage-1 sources, so the IVDR record names ALL the tools used.
         prov = asdict(result.provenance)

@@ -15,12 +15,19 @@ from clineval.core.schema import PredictionRecord
 
 
 def _coerce_pmids(records: list[PredictionRecord]) -> list[PredictionRecord]:
-    """Coerce each record's gold PMIDs to strings, in place.
+    """Coerce each record's gold PMIDs to strings, in place, and enforce ≥1 gold PMID.
 
-    Safe to mutate: ``JSONLDatasetLoader`` builds fresh records and lists on every
-    ``load()``, so there is no shared state to alias.
+    A retrieval benchmark variant with an empty ``gold_reference`` carries no signal and would
+    score a spurious 1.0 (empty-gold + empty-retrieval), inflating the aggregate — so it is
+    rejected loudly rather than silently averaged in. Safe to mutate: ``JSONLDatasetLoader``
+    builds fresh records and lists on every ``load()``, so there is no shared state to alias.
     """
     for rec in records:
+        if not rec.gold_reference:
+            raise ValueError(
+                f"variant {rec.id!r} has an empty gold_reference — a retrieval benchmark "
+                "variant must have at least one known PMID (drop variants with no citations)"
+            )
         rec.gold_reference = [str(p) for p in rec.gold_reference]
     return records
 

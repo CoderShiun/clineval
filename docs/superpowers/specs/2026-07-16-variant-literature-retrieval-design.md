@@ -397,7 +397,11 @@ Jinja2 → Markdown. Sections:
 3. **Per-variant table** — variant, gene, gold_n, retrieved_n, found, missed, recall, precision.
 4. **Missed-evidence detail** — per variant, the FN gold PMIDs (the clinically important misses).
 5. **Unresolved variants** — those flagged `resolved=False` (proves "flag, don't drop").
-6. **HGMD/Wermers baseline comparison** — a static reference row next to our free-stack numbers.
+6. ~~**HGMD/Wermers baseline comparison** — a static reference row~~ — **SUPERSEDED (impl).**
+   The report was reframed to **"Concordance with HGMD"**: since the gold *is* HGMD's list, a
+   static "vs HGMD" row is circular. Instead the report shows macro **and** micro concordance
+   with the hard-ceiling caveat, and a **Retrieval-integrity** section for degraded variants.
+   See `docs/variant_retrieval_guide.md` §2/§5.
 7. **Regulatory Evidence Mapping** — retrieval subset (§10).
 8. **Disclaimer.**
 
@@ -478,7 +482,9 @@ Default `--source cached` (offline, real numbers, zero setup — mirrors HPO's c
 - [ ] `retrieve(forms)` returns a deduplicated PMID union with per-paper metadata + matched-form provenance.
 - [ ] `clineval retrieval-eval --dataset ryr1` outputs per-variant + aggregate recall/precision/F1
       via ClinEval's promoted metric layer, plus missed-evidence + unresolved-variant sections.
-- [ ] A results table compares free-stack recall/precision to the HGMD/Wermers baseline.
+- [x] ~~A results table compares free-stack recall/precision to the HGMD/Wermers baseline.~~
+      **Superseded** by the "Concordance with HGMD" reframing (the gold *is* HGMD; a static
+      "vs HGMD" row is circular). Report shows macro+micro concordance + the ceiling caveat.
 - [ ] All external calls cached; throttled with an NCBI API key; failures logged, not fatal.
 - [ ] No patient data; no UI; no stage 3/4/5 code.
 

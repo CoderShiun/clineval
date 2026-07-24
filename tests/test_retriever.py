@@ -12,6 +12,12 @@ def test_dataset_retriever_passes_through():
     assert out == ["1", "2"] and out is not rec.system_output and r.mode == "dataset"
 
 
+def test_dataset_retriever_coerces_predictions_to_str():
+    # Integer PMIDs in a dataset's system_output must not silently mismatch the string gold.
+    rec = PredictionRecord(id="v", input_text="v", gold_reference=["7"], system_output=[7, 8])
+    assert DatasetRetriever().extract(rec) == ["7", "8"]
+
+
 def test_cached_retriever_replays_and_sets_metadata(tmp_path):
     p = tmp_path / "cache.jsonl"
     p.write_text(
@@ -26,6 +32,7 @@ def test_cached_retriever_replays_and_sets_metadata(tmp_path):
     rec1 = PredictionRecord(id="v1", input_text="v1", gold_reference=["1"])
     assert r.extract(rec1) == ["1", "2"]
     assert rec1.metadata["resolved"] is False and rec1.metadata["notes"] == ["hard case"]
+    assert rec1.metadata["retrieval_status"] == "ok"
 
     rec2 = PredictionRecord(id="v2", input_text="v2", gold_reference=["3"])   # resolved, no notes
     assert r.extract(rec2) == ["3"]
@@ -33,6 +40,7 @@ def test_cached_retriever_replays_and_sets_metadata(tmp_path):
 
     miss = PredictionRecord(id="zzz", input_text="zzz", gold_reference=[])    # not in cache
     assert r.extract(miss) == []
+    assert miss.metadata["retrieval_status"] == "cache_miss"    # miss != "no papers"
 
 
 def test_cached_retriever_does_not_alias_the_cache_notes(tmp_path):
@@ -82,6 +90,7 @@ def test_pipeline_retriever_runs_both_stages_and_records_provenance():
     )
     assert r.extract(rec) == ["111", "222"]
     assert rec.metadata["resolved"] is True
+    assert rec.metadata["retrieval_status"] == "ok"                       # clean live retrieval
     assert rec.metadata["notes"] == ["stage1 note", "stage2 note"]        # both stages' notes
     assert rec.metadata["provenance"]["vvdb_version"] == "vvdb_2025_3"
     # Evidence snapshot names ALL tools used (normalization + retrieval), no duplicates.

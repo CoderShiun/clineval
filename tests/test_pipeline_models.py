@@ -4,7 +4,7 @@ from clineval.pipeline.models import PaperRef, PipelineProvenance, RetrievalResu
 def test_pipeline_provenance_defaults_and_isolation():
     p = PipelineProvenance()
     assert (p.vv_version, p.vvdb_version, p.vvta_version) == ("", "", "")
-    assert p.sources == [] and p.cache_hits == 0 and p.cache_misses == 0
+    assert p.sources == []
     # A mutable default must be per-instance, not shared across instances.
     p.sources.append("variantvalidator")
     assert PipelineProvenance().sources == []
@@ -18,7 +18,7 @@ def test_paper_ref_defaults():
 
 def test_variant_forms_defaults_are_independent():
     a = VariantForms(input="x", forms=[], resolved=False, xrefs={})
-    assert a.gene == "" and a.notes == []
+    assert a.gene == "" and a.notes == [] and a.normalization_failed is False
     a.notes.append("flagged")
     a.provenance.sources.append("vv")
     b = VariantForms(input="y", forms=[], resolved=True, xrefs={})

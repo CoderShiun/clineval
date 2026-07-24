@@ -1,8 +1,9 @@
 """Render a variant_retrieval EvaluationResult to Markdown (its own template).
 
-Recall-first: the report leads with recall (did we surface the known references?)
-and frames precision as contextual, then details missed evidence and unresolved
-variants so nothing is silently dropped, and closes with the regulatory mapping.
+Concordance-framed: the report shows macro AND micro recall together with the
+HGMD-ceiling caveat (these are concordance-with-HGMD scores, not evidence coverage),
+details missed evidence, unresolved variants, and any degraded retrieval so nothing is
+silently dropped or over-trusted, and closes with the regulatory mapping.
 """
 
 from __future__ import annotations
@@ -24,6 +25,9 @@ def render_retrieval_report(result: EvaluationResult) -> str:
     # Pre-join provenance so the template line ends in an expression, not a block tag —
     # otherwise trim_blocks eats the newline and glues the next heading onto the bullet.
     provenance = ", ".join(f"{k}={v}" for k, v in result.provenance.items())
+    # The metric EXCLUDES degraded variants (API failure / cache miss) from the scores; list
+    # them so their absence from the aggregates is explicit, not silent.
+    degraded = metric.details.get("degraded", [])
     return template.render(
         r=result,
         provenance=provenance,
@@ -31,6 +35,7 @@ def render_retrieval_report(result: EvaluationResult) -> str:
         per_doc=metric.per_document,
         missed=metric.details.get("missed", {}),
         unresolved=metric.details.get("unresolved", []),
+        degraded=degraded,
         rows=mapping.get_retrieval_mapping_rows(),
         disclaimer=mapping.DISCLAIMER,
     )

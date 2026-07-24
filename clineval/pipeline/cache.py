@@ -29,7 +29,8 @@ def make_key(base_url: str, path: str, params: dict | None) -> str:
 
 
 class RequestCache:
-    """Keyed JSON store over sqlite3 (stdlib). Counts hits/misses for provenance.
+    """Keyed JSON store over sqlite3 (stdlib). ``stats()`` exposes hit/miss counts for
+    optional observability — they are NOT carried into the IVDR provenance snapshot.
 
     Single-threaded: one connection per process (sqlite's default
     ``check_same_thread=True``). The Phase-1 pipeline is sequential — do not share

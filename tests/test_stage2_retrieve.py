@@ -14,16 +14,24 @@ def _forms(rsid="rs118192172"):
 
 
 class _FakeLitVar:
-    def __init__(self, candidates=None, pubs=None):
+    def __init__(self, candidates=None, pubs=None, fail_autocomplete=False, fail_publications=False):
         self._candidates = candidates or []      # returned by autocomplete for any query
         self._pubs = pubs or {}                  # litvar_id -> [pmids]
+        self._fail_autocomplete = fail_autocomplete
+        self._fail_publications = fail_publications
+        self.queries = []                        # every query actually asked (pins query-gen)
         self.publication_ids = []
 
     def autocomplete(self, query):
+        self.queries.append(query)
+        if self._fail_autocomplete:
+            raise RuntimeError("litvar autocomplete down")
         return list(self._candidates)
 
     def publications(self, litvar_id):
         self.publication_ids.append(litvar_id)
+        if self._fail_publications:
+            raise RuntimeError("litvar publications down")
         return list(self._pubs.get(litvar_id, []))
 
 
@@ -60,6 +68,101 @@ def test_retrieve_unions_ids_gates_collisions_and_attaches_metadata():
     assert by["111"].title == "T111" and by["111"].year == 2020  # metadata attached
     assert set(result.provenance.sources) == {"litvar2", "eutils"}
     assert result.provenance.vvdb_version == "vvdb_2025_3"
+    assert result.status == "ok"
+    # Pin the EXACT autocomplete queries generated (gene + accession-stripped p./c. + rsID) —
+    # the fake records what it was asked, so a regression in query generation fails loudly.
+    assert set(litvar.queries) == {
+        "RYR1 c.1840C>T", "RYR1 p.R614C", "RYR1 p.Arg614Cys", "RYR1 rs118192172"
+    }
+
+
+def test_retrieve_non_missense_variant_gets_cdna_query():
+    # Production-shaped forms for a splice/intronic variant: accession-qualified c. (NO bare
+    # 'c.'), genomic, VCF — no protein, no rsID. The accession-stripped cDNA query must fire,
+    # else the variant gets no gene-keyed retrieval path at all.
+    forms = VariantForms(
+        input="NM_000540.3:c.1840+1G>A",
+        forms=["NM_000540.3:c.1840+1G>A", "NC_000019.10:g.38457546G>A", "19-38457546-G-A"],
+        resolved=False, xrefs={"rsid": None, "clinvar": None, "gnomad": None},
+        gene="RYR1", provenance=PipelineProvenance(),
+    )
+    litvar = _FakeLitVar(
+        candidates=[{"_id": "litvar@#6261#c.1840+1G>A", "rsid": None, "gene": ["RYR1"],
+                     "hgvs": "c.1840+1G>A"}],
+        pubs={"litvar@#6261#c.1840+1G>A": ["555"]},
+    )
+    result = retrieve(forms, litvar=litvar, eutils=_FakeEutils())
+    assert litvar.queries == ["RYR1 c.1840+1G>A"]     # only the accession-stripped cDNA query
+    assert result.pmids == ["555"]
+
+
+def test_intronic_no_rsid_variant_queries_litvar_end_to_end():
+    # The real non-missense gap, driven through normalize -> retrieve on PRODUCTION forms:
+    # an intronic variant with no rsID. Regression guard against the "dead c. branch" bug
+    # (a unit test on hand-crafted bare-'c.' forms would have masked it).
+    from clineval.pipeline.clients.variantvalidator import VVParsed
+    from clineval.pipeline.normalize import normalize_and_expand
+
+    parsed = VVParsed(
+        c_form="NM_000540.3:c.1840+1G>A", protein_tlr="", protein_slr="",
+        genomic_forms=["NC_000019.10:g.38457546G>A"],
+        vcf_tuples=[("19", "38457546", "G", "A")],
+        vcf_by_build={"grch38": ("19", "38457546", "G", "A"), "hg38": ("19", "38457546", "G", "A")},
+        gene="RYR1", vvdb_version="vvdb_2025_3",
+    )
+
+    class _VV:
+        def fetch(self, hgvs, build="GRCh38"):
+            return parsed
+
+    class _MV:
+        def lookup(self, hgvs, assembly=None):
+            return {"rsid": None, "clinvar": None, "gnomad": None}
+
+    forms = normalize_and_expand("NM_000540.3:c.1840+1G>A", vv=_VV(), mv=_MV())
+    assert forms.resolved is False and not forms.xrefs["rsid"]      # non-missense, no rsID
+    litvar = _FakeLitVar(
+        candidates=[{"_id": "litvar@#6261#c.1840+1G>A", "rsid": None, "gene": ["RYR1"],
+                     "hgvs": "c.1840+1G>A"}],
+        pubs={"litvar@#6261#c.1840+1G>A": ["777"]},
+    )
+    result = retrieve(forms, litvar=litvar, eutils=_FakeEutils())
+    assert "RYR1 c.1840+1G>A" in litvar.queries                     # gap closed in production shape
+    assert result.pmids == ["777"]
+
+
+def test_retrieve_records_litvar_failure_and_marks_degraded():
+    # A LitVar outage must NOT look like "no papers": status=degraded, a note explains it,
+    # and litvar2 is not claimed as a source that returned data.
+    litvar = _FakeLitVar(fail_autocomplete=True)
+    result = retrieve(_forms(rsid=None), litvar=litvar, eutils=_FakeEutils())
+    assert result.pmids == []
+    assert result.status == "degraded"
+    assert any("litvar autocomplete failed" in n for n in result.notes)
+    assert "litvar2" not in result.provenance.sources
+
+
+def test_retrieve_marks_degraded_when_stage1_failed():
+    # A Stage-1 (VariantValidator) failure leaves no gene/rsID, so NO LitVar call is made —
+    # its empty result must still be flagged degraded, not scored as a real zero.
+    forms = VariantForms(
+        input="NM_000540.3:c.1840C>T", forms=["NM_000540.3:c.1840C>T"], resolved=False,
+        xrefs={"rsid": None, "clinvar": None, "gnomad": None}, gene="",
+        provenance=PipelineProvenance(), normalization_failed=True,
+    )
+    litvar = _FakeLitVar()
+    result = retrieve(forms, litvar=litvar, eutils=_FakeEutils())
+    assert litvar.queries == [] and result.pmids == []            # nothing even attempted
+    assert result.status == "degraded"                             # but flagged, not "ok"
+
+
+def test_retrieve_records_publications_failure():
+    litvar = _FakeLitVar(pubs={"litvar@rs118192172##": ["111"]}, fail_publications=True)
+    result = retrieve(_forms(), litvar=litvar, eutils=_FakeEutils())
+    assert result.pmids == []                                   # the one id's fetch failed
+    assert result.status == "degraded"
+    assert any("litvar publications failed" in n for n in result.notes)
+    assert "litvar2" in result.provenance.sources              # autocomplete still succeeded
 
 
 def test_retrieve_non_fatal_on_eutils_failure():
